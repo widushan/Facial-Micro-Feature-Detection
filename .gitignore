@@ -1,0 +1,11 @@
+.venv
+__pycache__
+.qodo
+Data
+expressions
+testing
+backup_script.py
+V1Expression.ipynb
+landmark_facial_expression_model.pth
+facs_au_model.pth
+
