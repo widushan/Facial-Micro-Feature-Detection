@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Senta - Emotion AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="glass-background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-face-smile-beam"></i> Senta AI
+            </div>
+            <h1>Emotion & Micro-Feature Analysis</h1>
+        </header>
+
+        <main class="grid-layout">
+            <!-- Camera & Control Section -->
+            <section class="card glass-panel video-section">
+                <h2><i class="fa-solid fa-camera"></i> Live Input</h2>
+                <div class="video-container">
+                    <video id="videoPreview" autoplay muted playsinline></video>
+                </div>
+                <div class="controls">
+                    <button id="startBtn" class="btn btn-primary"><i class="fa-solid fa-play"></i> Start Camera</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled><i class="fa-solid fa-stop"></i> Stop</button>
+                    <button id="submitBtn" class="btn btn-success" disabled><i class="fa-solid fa-brain"></i>
+                        Analyze</button>
+                </div>
+                <!-- Status/Loader -->
+                <div id="statusMessage" class="status-message">Ready to capture</div>
+                <div id="loader" class="loader hidden"></div>
+            </section>
+
+            <!-- Result Section -->
+            <section class="card glass-panel result-section">
+                <h2><i class="fa-solid fa-chart-pie"></i> Analysis Result</h2>
+
+                <div class="emotion-display">
+                    <span class="label">Detected Emotion</span>
+                    <h1 id="detectedEmotion" class="glowing-text">--</h1>
+                </div>
+
+                <div class="confidence-stats hidden" id="confidenceStats">
+                    <!-- Placeholder for probabilities if needed -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Micro-Features Charts -->
+        <section class="metrics-section">
+            <h2 class="section-title">Surface Vector Metrics (Frame-by-Frame)</h2>
+            <div class="metrics-grid" id="metricsGrid">
+                <!-- Dynamically generated tables will go here -->
+                <!-- We will create 6 cards for regions: Brow, Eye, Cheek, Mouth, Lips, Jaw -->
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+
+</html>
