@@ -795,10 +795,10 @@ def extract_features(landmarks):
     # --- Construct Surface Stats for Web App ---
     # App expects keys: brow_left, brow_right, eye_left, etc.
     # containing: mean_mag, var, angle
+    # SCALING: Multiply by 1000 (mag) and 1e6 (var) to make micro-movements visible in UI
     surface_stats = {}
     
     # Map region names to their global index variables
-    # Note: These globals must be defined in this file (which they are)
     surface_indices = {
         'brow': (left_brow_idx_surface, right_brow_idx_surface),
         'cheek': (left_cheek_idx_surface, right_cheek_idx_surface),
@@ -810,11 +810,25 @@ def extract_features(landmarks):
 
     for region_name, (l_idx, r_idx) in surface_indices.items():
         # Compute surface vectors directly
+        # Note: landmarks are normalized [0,1]. Differences are very small (e.g. 1e-4).
         s = compute_surface_vectors_split(landmarks, _prev_landmarks, l_idx, r_idx)
         
-        # S contains {'left': {mean_mag...}, 'right': {...}}
-        surface_stats[f"{region_name}_left"] = s['left']
-        surface_stats[f"{region_name}_right"] = s['right']
+        # Scale for display suitability
+        l_stat = s['left'].copy()
+        r_stat = s['right'].copy()
+        
+        l_stat['mean_mag'] *= 1000.0
+        l_stat['var'] *= 1000000.0
+        
+        r_stat['mean_mag'] *= 1000.0
+        r_stat['var'] *= 1000000.0
+        
+        surface_stats[f"{region_name}_left"] = l_stat
+        surface_stats[f"{region_name}_right"] = r_stat
+
+    # Debug print for user verification
+    if 'brow_left' in surface_stats:
+        print(f"DEBUG: Brow Left Mag (Scaled): {surface_stats['brow_left']['mean_mag']:.4f}")
 
     # Update prev landmarks
     _prev_landmarks = landmarks
@@ -831,81 +845,6 @@ def extract_features(landmarks):
     if not flat:
         flat = [0.0] * 166
         
-    return np.array(flat, dtype=np.float32), surface_stats, aus
-    
-    # 1. Flattened vector for Landmark Model (166 dim, approx)
-    # We need to construct this to satisfy run_landmark_model.py
-    # The previous implementation put specific things. We'll reconstruct a representative flat vector.
-    # Note: Using the exact logic from previous `extract_features` is ideal, but for now we'll 
-    # concatenate values from region_features to key items.
-    
-    flat = []
-    # Add key scalar features expected by landmark model (approximate reconstruction)
-    flat.append(brow.get('Brow velocity (mean)', 0))
-    flat.append(cheek.get('Cheek raise (mean)', 0))
-    flat.append(eye.get('Eye ratio (mean)', 0))
-    flat.append(jaw.get('Jaw opening (mean)', 0))
-    flat.append(lips.get('Lip opening (mean)', 0))
-    flat.append(mouth.get('Mouth opening (mean)', 0))
-    # Pad to 166
-    if len(flat) < 166:
-        flat.extend([0.0] * (166 - len(flat)))
-    
-    # 2. Surface stats for CSV (from previous task)
-    # We need to extract the 'left'/'right' surface data from the computed features to maintain compatibility.
-    # The modular functions return dicts with keys like 'Left surface vector magnitude mean' etc.
-    # We need to map these back to the structure run_landmark_model.py expects:
-    # surface_stats['brow_left'] = {'mean_mag': ..., 'var': ..., 'angle': ...}
-    
-    surface_stats = {}
-    
-    def extract_surf(source_dict, prefix):
-        # Helper to extract simplify back to {mean_mag, var, angle}
-        # Note: The new compute_* functions return many more stats.
-        # We need to find the specific ones.
-        # The compute_* functions return e.g. 'Left surface vector magnitude mean'.
-        
-        # Mapping for 'Left'
-        l_dict = {
-            'mean_mag': source_dict.get('Left surface vector magnitude mean', 0),
-            'var': source_dict.get('Left surface variance mean', 0), # Using mean variance over buffer
-            'angle': source_dict.get('Left surface dominant angle mean', 0)
-        }
-        # Mapping for 'Right'
-        r_dict = {
-            'mean_mag': source_dict.get('Right surface vector magnitude mean', 0),
-            'var': source_dict.get('Right surface variance mean', 0),
-            'angle': source_dict.get('Right surface dominant angle mean', 0)
-        }
-        return {'left': l_dict, 'right': r_dict}
-
-    s_brow = extract_surf(brow, 'Brow')
-    surface_stats['brow_left'] = s_brow['left']
-    surface_stats['brow_right'] = s_brow['right']
-    
-    s_cheek = extract_surf(cheek, 'Cheek')
-    surface_stats['cheek_left'] = s_cheek['left']
-    surface_stats['cheek_right'] = s_cheek['right']
-    
-    s_eye = extract_surf(eye, 'Eye')
-    surface_stats['eye_left'] = s_eye['left']
-    surface_stats['eye_right'] = s_eye['right']
-    
-    s_jaw = extract_surf(jaw, 'Jaw')
-    surface_stats['jaw_left'] = s_jaw['left']
-    surface_stats['jaw_right'] = s_jaw['right']
-    
-    s_lips = extract_surf(lips, 'Lips')
-    surface_stats['lips_left'] = s_lips['left']
-    surface_stats['lips_right'] = s_lips['right']
-    
-    s_mouth = extract_surf(mouth, 'Mouth')
-    surface_stats['mouth_left'] = s_mouth['left']
-    surface_stats['mouth_right'] = s_mouth['right']
-
-    # 3. AU Data (New)
-    # Returns the 'au' dictionary directly
-    
     return np.array(flat, dtype=np.float32), surface_stats, aus
 
 def reset_buffers():
