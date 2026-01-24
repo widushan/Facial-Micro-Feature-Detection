@@ -30,7 +30,7 @@ OUTPUT_DIR = "."
 ALL_FEATURES_CSV = "all_features.csv"
 SELECTED_FEATURES_CSV = "selected_features.csv"
 MODEL_FILE = "landmark_facial_expression_model.pth"
-SEQ_LENGTH = 60
+SEQ_LENGTH = 120
 
 # ================= GLOBAL BUFFERS =================
 buffer_size = 10
@@ -270,23 +270,23 @@ def compute_brow_features(landmarks, prev_landmarks):
         'Brow frequency mean': freq_mean,
         'Brow peak frequency': peak_freq,
 
-        'Left surface vector magnitude mean': left['mean_mag'],
-        'Left surface variance (current)': left['var'],
-        'Left surface variance mean': var_stats_l[0],
-        'Left surface variance std': var_stats_l[1],
-        'Left surface variance min': var_stats_l[2],
-        'Left surface variance max': var_stats_l[3],
-        'Left surface dominant angle mean': dir_stats_l[0],
-        'Left surface dominant angle std': dir_stats_l[1],
+        'Brow Left surface vector magnitude mean': left['mean_mag'],
+        'Brow Left surface variance (current)': left['var'],
+        'Brow Left surface variance mean': var_stats_l[0],
+        'Brow Left surface variance std': var_stats_l[1],
+        'Brow Left surface variance min': var_stats_l[2],
+        'Brow Left surface variance max': var_stats_l[3],
+        'Brow Left surface dominant angle mean': dir_stats_l[0],
+        'Brow Left surface dominant angle std': dir_stats_l[1],
 
-        'Right surface vector magnitude mean': right['mean_mag'],
-        'Right surface variance (current)': right['var'],
-        'Right surface variance mean': var_stats_r[0],
-        'Right surface variance std': var_stats_r[1],
-        'Right surface variance min': var_stats_r[2],
-        'Right surface variance max': var_stats_r[3],
-        'Right surface dominant angle mean': dir_stats_r[0],
-        'Right surface dominant angle std': dir_stats_r[1],
+        'Brow Right surface vector magnitude mean': right['mean_mag'],
+        'Brow Right surface variance (current)': right['var'],
+        'Brow Right surface variance mean': var_stats_r[0],
+        'Brow Right surface variance std': var_stats_r[1],
+        'Brow Right surface variance min': var_stats_r[2],
+        'Brow Right surface variance max': var_stats_r[3],
+        'Brow Right surface dominant angle mean': dir_stats_r[0],
+        'Brow Right surface dominant angle std': dir_stats_r[1],
     }
 
 # --- CHEEK --- #
@@ -339,23 +339,23 @@ def compute_cheek_features(landmarks, prev_landmarks):
         'Cheek frequency mean': freq,
         'Cheek asymmetry (mean)': asym,
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Cheek Left surface vector magnitude mean': l['mean_mag'],
+        'Cheek Left surface variance (current)': l['var'],
+        'Cheek Left surface variance mean': vl[0],
+        'Cheek Left surface variance std': vl[1],
+        'Cheek Left surface variance min': vl[2],
+        'Cheek Left surface variance max': vl[3],
+        'Cheek Left surface dominant angle mean': dl[0],
+        'Cheek Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Cheek Right surface vector magnitude mean': r['mean_mag'],
+        'Cheek Right surface variance (current)': r['var'],
+        'Cheek Right surface variance mean': vr[0],
+        'Cheek Right surface variance std': vr[1],
+        'Cheek Right surface variance min': vr[2],
+        'Cheek Right surface variance max': vr[3],
+        'Cheek Right surface dominant angle mean': dr[0],
+        'Cheek Right surface dominant angle std': dr[1],
     }
 
 # --- EYE ---
@@ -410,23 +410,23 @@ def compute_eye_features(landmarks, prev_landmarks):
         'Eye squint velocity (mean)': vel_stats[0],
         'Eye squint velocity (std)': vel_stats[1],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Eye Left surface vector magnitude mean': l['mean_mag'],
+        'Eye Left surface variance (current)': l['var'],
+        'Eye Left surface variance mean': vl[0],
+        'Eye Left surface variance std': vl[1],
+        'Eye Left surface variance min': vl[2],
+        'Eye Left surface variance max': vl[3],
+        'Eye Left surface dominant angle mean': dl[0],
+        'Eye Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Eye Right surface vector magnitude mean': r['mean_mag'],
+        'Eye Right surface variance (current)': r['var'],
+        'Eye Right surface variance mean': vr[0],
+        'Eye Right surface variance std': vr[1],
+        'Eye Right surface variance min': vr[2],
+        'Eye Right surface variance max': vr[3],
+        'Eye Right surface dominant angle mean': dr[0],
+        'Eye Right surface dominant angle std': dr[1],
     }
 
 # --- JAW ---
@@ -486,23 +486,23 @@ def compute_jaw_features(landmarks, prev_landmarks):
         'Jaw frequency mean': freq_mean,
         'Jaw peak frequency': peak_freq,
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Jaw Left surface vector magnitude mean': l['mean_mag'],
+        'Jaw Left surface variance (current)': l['var'],
+        'Jaw Left surface variance mean': vl[0],
+        'Jaw Left surface variance std': vl[1],
+        'Jaw Left surface variance min': vl[2],
+        'Jaw Left surface variance max': vl[3],
+        'Jaw Left surface dominant angle mean': dl[0],
+        'Jaw Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Jaw Right surface vector magnitude mean': r['mean_mag'],
+        'Jaw Right surface variance (current)': r['var'],
+        'Jaw Right surface variance mean': vr[0],
+        'Jaw Right surface variance std': vr[1],
+        'Jaw Right surface variance min': vr[2],
+        'Jaw Right surface variance max': vr[3],
+        'Jaw Right surface dominant angle mean': dr[0],
+        'Jaw Right surface dominant angle std': dr[1],
     }
 
 # --- LIPS ---
@@ -565,23 +565,23 @@ def compute_lips_features(landmarks, prev_landmarks):
         'Lip corner asymmetry (std)': corner_asym_stats[1],
         'Lip corner asymmetry (max)': corner_asym_stats[2],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Lip Left surface vector magnitude mean': l['mean_mag'],
+        'Lip Left surface variance (current)': l['var'],
+        'Lip Left surface variance mean': vl[0],
+        'Lip Left surface variance std': vl[1],
+        'Lip Left surface variance min': vl[2],
+        'Lip Left surface variance max': vl[3],
+        'Lip Left surface dominant angle mean': dl[0],
+        'Lip Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Lip Right surface vector magnitude mean': r['mean_mag'],
+        'Lip Right surface variance (current)': r['var'],
+        'Lip Right surface variance mean': vr[0],
+        'Lip Right surface variance std': vr[1],
+        'Lip Right surface variance min': vr[2],
+        'Lip Right surface variance max': vr[3],
+        'Lip Right surface dominant angle mean': dr[0],
+        'Lip Right surface dominant angle std': dr[1],
     }
 
 # --- MOUTH ---
@@ -644,23 +644,23 @@ def compute_mouth_features(landmarks, prev_landmarks):
         'Mouth corner asymmetry (std)': corner_asym_stats[1],
         'Mouth corner asymmetry (max)': corner_asym_stats[2],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Mouth Left surface vector magnitude mean': l['mean_mag'],
+        'Mouth Left surface variance (current)': l['var'],
+        'Mouth Left surface variance mean': vl[0],
+        'Mouth Left surface variance std': vl[1],
+        'Mouth Left surface variance min': vl[2],
+        'Mouth Left surface variance max': vl[3],
+        'Mouth Left surface dominant angle mean': dl[0],
+        'Mouth Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Mouth Right surface vector magnitude mean': r['mean_mag'],
+        'Mouth Right surface variance (current)': r['var'],
+        'Mouth Right surface variance mean': vr[0],
+        'Mouth Right surface variance std': vr[1],
+        'Mouth Right surface variance min': vr[2],
+        'Mouth Right surface variance max': vr[3],
+        'Mouth Right surface dominant angle mean': dr[0],
+        'Mouth Right surface dominant angle std': dr[1],
     }
 
 # --- EYE ---
@@ -718,23 +718,23 @@ def compute_eye_features(landmarks, prev_landmarks):
         'Eye squint velocity (mean)': vel_stats[0],
         'Eye squint velocity (std)': vel_stats[1],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Eye Left surface vector magnitude mean': l['mean_mag'],
+        'Eye Left surface variance (current)': l['var'],
+        'Eye Left surface variance mean': vl[0],
+        'Eye Left surface variance std': vl[1],
+        'Eye Left surface variance min': vl[2],
+        'Eye Left surface variance max': vl[3],
+        'Eye Left surface dominant angle mean': dl[0],
+        'Eye Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Eye Right surface vector magnitude mean': r['mean_mag'],
+        'Eye Right surface variance (current)': r['var'],
+        'Eye Right surface variance mean': vr[0],
+        'Eye Right surface variance std': vr[1],
+        'Eye Right surface variance min': vr[2],
+        'Eye Right surface variance max': vr[3],
+        'Eye Right surface dominant angle mean': dr[0],
+        'Eye Right surface dominant angle std': dr[1],
     }
 
 # --- JAW ---
@@ -797,23 +797,23 @@ def compute_jaw_features(landmarks, prev_landmarks):
         'Jaw frequency mean': freq_mean,
         'Jaw peak frequency': peak_freq,
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Jaw Left surface vector magnitude mean': l['mean_mag'],
+        'Jaw Left surface variance (current)': l['var'],
+        'Jaw Left surface variance mean': vl[0],
+        'Jaw Left surface variance std': vl[1],
+        'Jaw Left surface variance min': vl[2],
+        'Jaw Left surface variance max': vl[3],
+        'Jaw Left surface dominant angle mean': dl[0],
+        'Jaw Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Jaw Right surface vector magnitude mean': r['mean_mag'],
+        'Jaw Right surface variance (current)': r['var'],
+        'Jaw Right surface variance mean': vr[0],
+        'Jaw Right surface variance std': vr[1],
+        'Jaw Right surface variance min': vr[2],
+        'Jaw Right surface variance max': vr[3],
+        'Jaw Right surface dominant angle mean': dr[0],
+        'Jaw Right surface dominant angle std': dr[1],
     }
 
 # --- LIPS ---
@@ -875,23 +875,23 @@ def compute_lips_features(landmarks, prev_landmarks):
         'Lip corner asymmetry (std)': corner_asym_stats[1],
         'Lip corner asymmetry (max)': corner_asym_stats[2],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Lip Left surface vector magnitude mean': l['mean_mag'],
+        'Lip Left surface variance (current)': l['var'],
+        'Lip Left surface variance mean': vl[0],
+        'Lip Left surface variance std': vl[1],
+        'Lip Left surface variance min': vl[2],
+        'Lip Left surface variance max': vl[3],
+        'Lip Left surface dominant angle mean': dl[0],
+        'Lip Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Lip Right surface vector magnitude mean': r['mean_mag'],
+        'Lip Right surface variance (current)': r['var'],
+        'Lip Right surface variance mean': vr[0],
+        'Lip Right surface variance std': vr[1],
+        'Lip Right surface variance min': vr[2],
+        'Lip Right surface variance max': vr[3],
+        'Lip Right surface dominant angle mean': dr[0],
+        'Lip Right surface dominant angle std': dr[1],
     }
 
 # --- MOUTH ---
@@ -953,23 +953,23 @@ def compute_mouth_features(landmarks, prev_landmarks):
         'Mouth corner asymmetry (std)': corner_asym_stats[1],
         'Mouth corner asymmetry (max)': corner_asym_stats[2],
 
-        'Left surface vector magnitude mean': l['mean_mag'],
-        'Left surface variance (current)': l['var'],
-        'Left surface variance mean': vl[0],
-        'Left surface variance std': vl[1],
-        'Left surface variance min': vl[2],
-        'Left surface variance max': vl[3],
-        'Left surface dominant angle mean': dl[0],
-        'Left surface dominant angle std': dl[1],
+        'Mouth Left surface vector magnitude mean': l['mean_mag'],
+        'Mouth Left surface variance (current)': l['var'],
+        'Mouth Left surface variance mean': vl[0],
+        'Mouth Left surface variance std': vl[1],
+        'Mouth Left surface variance min': vl[2],
+        'Mouth Left surface variance max': vl[3],
+        'Mouth Left surface dominant angle mean': dl[0],
+        'Mouth Left surface dominant angle std': dl[1],
 
-        'Right surface vector magnitude mean': r['mean_mag'],
-        'Right surface variance (current)': r['var'],
-        'Right surface variance mean': vr[0],
-        'Right surface variance std': vr[1],
-        'Right surface variance min': vr[2],
-        'Right surface variance max': vr[3],
-        'Right surface dominant angle mean': dr[0],
-        'Right surface dominant angle std': dr[1],
+        'Mouth Right surface vector magnitude mean': r['mean_mag'],
+        'Mouth Right surface variance (current)': r['var'],
+        'Mouth Right surface variance mean': vr[0],
+        'Mouth Right surface variance std': vr[1],
+        'Mouth Right surface variance min': vr[2],
+        'Mouth Right surface variance max': vr[3],
+        'Mouth Right surface dominant angle mean': dr[0],
+        'Mouth Right surface dominant angle std': dr[1],
     }
 
 def pad_sequences(sequences, maxlen=None, dtype='float32', padding='post', truncating='post', value=0.):
@@ -1084,7 +1084,7 @@ def perform_pca_selection(df=None):
     selected_indices = set()
     components = pca.components_
     for i in range(components.shape[0]):
-        top_indices = np.argsort(np.abs(components[i]))[-2:]
+        top_indices = np.argsort(np.abs(components[i]))[-5:]
         for idx in top_indices: selected_indices.add(idx)
         
     selected_features = [feature_cols[i] for i in selected_indices]
@@ -1107,7 +1107,7 @@ class ResidualConvBlock(nn.Module):
         return F.relu(self.bn(self.conv(x)) + self.shortcut(x))
 
 class OptimizedCNNLSTM(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_classes, num_layers=2):
+    def __init__(self, input_dim, hidden_dim, num_classes, num_layers=3):
         super().__init__()
         self.noise_std = 0.05
         self.cnn = nn.Sequential(
@@ -1116,11 +1116,11 @@ class OptimizedCNNLSTM(nn.Module):
             ResidualConvBlock(64, 128),
             nn.MaxPool1d(2)
         )
-        self.lstm = nn.LSTM(128, 64, batch_first=True, num_layers=2, bidirectional=True, dropout=0.3)
-        self.attention = nn.MultiheadAttention(embed_dim=128, num_heads=4, batch_first=True, dropout=0.3)
+        self.lstm = nn.LSTM(128, hidden_dim, batch_first=True, num_layers=num_layers, bidirectional=True, dropout=0.2)
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_dim*2, num_heads=4, batch_first=True, dropout=0.2)
         self.fc = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(128, num_classes)
+            nn.Dropout(0.4),
+            nn.Linear(hidden_dim*2, num_classes)
         )
     def forward(self, x, lengths):
         if self.training: x = x + torch.randn_like(x) * self.noise_std
@@ -1195,30 +1195,29 @@ def train_model(df=None, feature_names=None):
     class_counts = np.bincount(y_train)
     class_weights = 1. / class_counts
     class_weights = torch.tensor(class_weights, dtype=torch.float32)
-    sample_weights = []
-    for idx in y_train: sample_weights.append(1.0 / (class_weights[idx].item() * class_counts[idx]))
+    sample_weights = [class_weights[y] for y in y_train]
     sample_weights = torch.tensor(sample_weights, dtype=torch.float32)
     weighted_sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
     train_dataset = ExpressionDataset(list(X_train), y_train, len_train)
     test_dataset = ExpressionDataset(list(X_test), y_test, len_test)
     
-    train_loader = DataLoader(train_dataset, batch_size=16, sampler=weighted_sampler, drop_last=True, collate_fn=collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=32, sampler=weighted_sampler, drop_last=True, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=collate_fn)
     
     feature_dim = len(feature_names)
-    hidden_dim = 64
+    hidden_dim = 128
     num_classes = len(unique_labels)
-    model = OptimizedCNNLSTM(feature_dim, hidden_dim, num_classes, num_layers=2)
+    model = OptimizedCNNLSTM(feature_dim, hidden_dim, num_classes, num_layers=3)
     
-    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.2)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-3)
-    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.0005, anneal_strategy='cos', total_steps=200*len(train_loader))
+    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001, anneal_strategy='cos', total_steps=300*len(train_loader))
     
-    epochs = 200
+    epochs = 300
     best_acc = 0.0
     best_loss = float('inf')
-    patience = 50
+    patience = 30
     counter = 0
     training_history = {'loss': [], 'val_loss': [], 'val_acc': []}
     start_time = time.time()
