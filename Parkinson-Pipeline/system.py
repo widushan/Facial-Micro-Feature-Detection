@@ -108,6 +108,53 @@ class ParkinsonDetectionSystem:
             ('Mouth', pd_module.left_mouth_idx_surface, pd_module.right_mouth_idx_surface, (0, 255, 255)),
         ]
 
+    def draw_surface_vectors(self, frame, landmarks, prev_landmarks, w, h):
+        if prev_landmarks is None: return
+        
+        for name, l_idx, r_idx, color in self.region_configs:
+            # Use the module's function to get vector stats
+            # We need to pass raw landmarks here, similar to vTwo.py
+            # But wait, pd.py compute_surface_vectors_split expects landmarks.
+            # vTwo.py passes: compute_surface_vectors_split(landmarks, prev_landmarks, l_idx, r_idx)
+            # where landmarks are [[x,y,z], ...]
+            
+            data = pd_module.compute_surface_vectors_split(landmarks, prev_landmarks, l_idx, r_idx)
+            
+            for side_key, side_data in [('left', data['left']), ('right', data['right'])]:
+                positions = side_data['positions']
+                mean_mag = side_data['mean_mag']
+                angle = side_data['angle']
+
+                if len(positions) == 0 or mean_mag < 0.0008:
+                    continue
+
+                # Compute average direction vector from angle
+                avg_dir = np.array([np.cos(angle), np.sin(angle)])
+
+                # Compute center position
+                center_pos = np.mean(positions, axis=0) if positions else np.array([0, 0, 0])
+                center_x = int(center_pos[0] * w)
+                center_y = int(center_pos[1] * h)
+
+                # Scale arrow length (heuristic from vTwo.py)
+                base_scale = 20
+                max_length = 40 # Increased visibility
+                min_length = 5
+                arrow_length = min(max(mean_mag * w * base_scale * 30, min_length), max_length)
+
+                dx = avg_dir[0] * arrow_length
+                dy = avg_dir[1] * arrow_length
+
+                end_x = int(center_x + dx)
+                end_y = int(center_y + dy)
+
+                # Draw the arrow
+                cv2.arrowedLine(frame, (center_x, center_y), (end_x, end_y), color, 2, tipLength=0.3)
+
+                # Label
+                # label = name[0] + ('L' if side_key == 'left' else 'R')
+                # cv2.putText(frame, label, (center_x - 10, center_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+
     def process_video_file(self, video_path):
         if not os.path.exists(video_path):
             print(f"Error processing video: File not found {video_path}")
@@ -174,6 +221,22 @@ class ParkinsonDetectionSystem:
                     pd_module._prev_landmarks_global = lm_list_norm
                     
                     # Visualization
+                    # 1. Draw Surface Vectors (using raw landmarks for screen position)
+                    # We need a previous raw landmarks frame for calculation or just reuse the logic?
+                    # pd_module.compute_surface_vectors_split takes whatever we give it. 
+                    # If we pass normalized landmarks, the vectors are small. 
+                    # vTwo.py passes raw landmarks?
+                    # vTwo.py: landmarks = [[lm.x, lm.y, lm.z] for lm in lmks] (raw 0-1 range)
+                    # So we should pass landmarks_list (raw) and maintain a previous RAW list.
+                    # pd_module._prev_landmarks_global is NORMALIZED. We need a separate raw history for visualization.
+                    
+                    if not hasattr(self, 'prev_raw_landmarks'):
+                        self.prev_raw_landmarks = None
+                        
+                    self.draw_surface_vectors(vis_frame, landmarks_list, self.prev_raw_landmarks, w, h)
+                    self.prev_raw_landmarks = landmarks_list
+
+                    # 2. Draw Landmarks (Green Dots)
                     for idx_set in [
                         pd_module.left_eye_idx, pd_module.right_eye_idx, 
                         pd_module.left_brow_idx, pd_module.right_brow_idx, 
