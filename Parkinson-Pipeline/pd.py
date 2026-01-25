@@ -1210,7 +1210,12 @@ class OptimizedCNNLSTM(nn.Module):
         x = x.permute(0, 2, 1)
         x = self.cnn(x)
         x = x.permute(0, 2, 1)
-        adj_len = (lengths.cpu() // 4).clamp(min=1)
+        
+        # Calculate valid lengths after CNN reduction (3 maxpools -> reduction by 2^3 = 8)
+        # Clamp to ensure we don't exceed actual tensor size (handle edge cases)
+        max_len = x.size(1)
+        adj_len = (lengths.cpu() // 8).clamp(min=1, max=max_len)
+        
         packed = pack_padded_sequence(x, adj_len, batch_first=True, enforce_sorted=False)
         lstm_out, _ = self.lstm(packed)
         lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
