@@ -397,7 +397,6 @@ def compute_cheek_features(landmarks, prev_landmarks):
         'Cheek Left surface dominant angle std': dl[1],
 
         'Cheek Right surface vector magnitude mean': r['mean_mag'],
-        'Cheek Right surface variance (current)': r['var'],
         'Cheek Right surface variance mean': vr[0],
         'Cheek Right surface variance std': vr[1],
         'Cheek Right surface variance min': vr[2],
@@ -408,6 +407,9 @@ def compute_cheek_features(landmarks, prev_landmarks):
 
 # --- EYE ---
 def compute_eye_features(landmarks, prev_landmarks):
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -415,12 +417,12 @@ def compute_eye_features(landmarks, prev_landmarks):
     lu = (norm_landmarks[159][1] + norm_landmarks[158][1] + norm_landmarks[160][1]) / 3
     ll = (norm_landmarks[145][1] + norm_landmarks[144][1] + norm_landmarks[153][1]) / 3
     lw = abs(norm_landmarks[33][0] - norm_landmarks[133][0])
-    left_ratio = abs(lu - ll) / lw if lw > 0 else 0
+    left_ratio = abs(lu - ll) / max(lw, 1e-6)
 
     ru = (norm_landmarks[386][1] + norm_landmarks[387][1] + norm_landmarks[385][1]) / 3
     rl = (norm_landmarks[374][1] + norm_landmarks[373][1] + norm_landmarks[380][1]) / 3
     rw = abs(norm_landmarks[362][0] - norm_landmarks[263][0])
-    right_ratio = abs(ru - rl) / rw if rw > 0 else 0
+    right_ratio = abs(ru - rl) / max(rw, 1e-6)
 
     ratio = (left_ratio + right_ratio) / 2
     eye_ratio_buffer.append(ratio)
@@ -430,7 +432,7 @@ def compute_eye_features(landmarks, prev_landmarks):
     vel_stats = [np.mean(eye_vel_buffer), np.std(eye_vel_buffer)] if len(eye_vel_buffer) > 1 else [0, 0]
     rapid = len(find_peaks(list(eye_vel_buffer), distance=2)[0]) if len(eye_vel_buffer) > 1 else 0
     var = np.var(eye_ratio_buffer) if len(eye_ratio_buffer) > 1 else 0
-    blink = 1 if ratio < 0.1 else 0
+    blink = 1 if ratio < 0.15 else 0
     blink_buffer.append(blink)
     blink_rate = sum(blink_buffer) / len(blink_buffer) if blink_buffer else 0
 
@@ -479,6 +481,9 @@ def compute_eye_features(landmarks, prev_landmarks):
 
 # --- JAW ---
 def compute_jaw_features(landmarks, prev_landmarks):
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -555,6 +560,9 @@ def compute_jaw_features(landmarks, prev_landmarks):
 
 # --- LIPS ---
 def compute_lips_features(landmarks, prev_landmarks):
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     # Normalized landmarks passed in
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
@@ -634,6 +642,9 @@ def compute_lips_features(landmarks, prev_landmarks):
 
 # --- MOUTH ---
 def compute_mouth_features(landmarks, prev_landmarks):
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     # Normalized landmarks passed in
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
@@ -709,159 +720,6 @@ def compute_mouth_features(landmarks, prev_landmarks):
         'Mouth Right surface variance max': vr[3],
         'Mouth Right surface dominant angle mean': dr[0],
         'Mouth Right surface dominant angle std': dr[1],
-    }
-
-# --- EYE ---
-def compute_eye_features(landmarks, prev_landmarks):
-    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
-    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
-    
-    if landmarks is None: return {}
-    nose_tip = np.array(landmarks[1])
-    norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
-
-    lu = (norm_landmarks[159][1] + norm_landmarks[158][1] + norm_landmarks[160][1]) / 3
-    ll = (norm_landmarks[145][1] + norm_landmarks[144][1] + norm_landmarks[153][1]) / 3
-    lw = abs(norm_landmarks[33][0] - norm_landmarks[133][0])
-    left_ratio = abs(lu - ll) / lw if lw > 0 else 0
-
-    ru = (norm_landmarks[386][1] + norm_landmarks[387][1] + norm_landmarks[385][1]) / 3
-    rl = (norm_landmarks[374][1] + norm_landmarks[373][1] + norm_landmarks[380][1]) / 3
-    rw = abs(norm_landmarks[362][0] - norm_landmarks[263][0])
-    right_ratio = abs(ru - rl) / rw if rw > 0 else 0
-
-    ratio = (left_ratio + right_ratio) / 2
-    eye_ratio_buffer.append(ratio)
-    stats = [np.mean(eye_ratio_buffer), np.std(eye_ratio_buffer)] if len(eye_ratio_buffer) > 1 else [0, 0]
-    vel = abs(ratio - eye_ratio_buffer[-2]) if len(eye_ratio_buffer) > 1 else 0
-    eye_vel_buffer.append(vel)
-    vel_stats = [np.mean(eye_vel_buffer), np.std(eye_vel_buffer)] if len(eye_vel_buffer) > 1 else [0, 0]
-    rapid = len(find_peaks(list(eye_vel_buffer), distance=2)[0]) if len(eye_vel_buffer) > 1 else 0
-    var = np.var(eye_ratio_buffer) if len(eye_ratio_buffer) > 1 else 0
-    blink = 1 if ratio < 0.1 else 0
-    blink_buffer.append(blink)
-    blink_rate = sum(blink_buffer) / len(blink_buffer) if blink_buffer else 0
-
-    surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_eye_idx_surface, right_eye_idx_surface)
-    l, r = surface['left'], surface['right']
-    eye_surface_var_buffer.append({'left': l['var'], 'right': r['var']})
-    eye_surface_dir_buffer.append({'left': l['angle'], 'right': r['angle']})
-
-    lv = [x['left'] for x in list(eye_surface_var_buffer)[-10:]]
-    rv = [x['right'] for x in list(eye_surface_var_buffer)[-10:]]
-    la = [x['left'] for x in list(eye_surface_dir_buffer)[-10:]]
-    ra = [x['right'] for x in list(eye_surface_dir_buffer)[-10:]]
-
-    vl = [np.mean(lv), np.std(lv), np.min(lv), np.max(lv)] if lv else [0]*4
-    vr = [np.mean(rv), np.std(rv), np.min(rv), np.max(rv)] if rv else [0]*4
-    dl = [np.mean(la), np.std(la)] if len(la) > 1 else [0, 0]
-    dr = [np.mean(ra), np.std(ra)] if len(ra) > 1 else [0, 0]
-
-    return {
-        'Eye widening micro-expression variance mean': var,
-        'Eye widening rapid changes count': rapid,
-        'Eye ratio (mean)': stats[0],
-        'Eye ratio (std)': stats[1],
-        'Blink rate': blink_rate,
-        'Eye squint velocity (mean)': vel_stats[0],
-        'Eye squint velocity (std)': vel_stats[1],
-
-        'Eye Left surface vector magnitude mean': l['mean_mag'],
-        'Eye Left surface variance (current)': l['var'],
-        'Eye Left surface variance mean': vl[0],
-        'Eye Left surface variance std': vl[1],
-        'Eye Left surface variance min': vl[2],
-        'Eye Left surface variance max': vl[3],
-        'Eye Left surface dominant angle mean': dl[0],
-        'Eye Left surface dominant angle std': dl[1],
-
-        'Eye Right surface vector magnitude mean': r['mean_mag'],
-        'Eye Right surface variance (current)': r['var'],
-        'Eye Right surface variance mean': vr[0],
-        'Eye Right surface variance std': vr[1],
-        'Eye Right surface variance min': vr[2],
-        'Eye Right surface variance max': vr[3],
-        'Eye Right surface dominant angle mean': dr[0],
-        'Eye Right surface dominant angle std': dr[1],
-    }
-
-# --- JAW ---
-def compute_jaw_features(landmarks, prev_landmarks):
-    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
-    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
-    
-    if landmarks is None: return {}
-    nose_tip = np.array(landmarks[1])
-    norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
-
-    chin = norm_landmarks[152]
-    upper_jaw_ref = norm_landmarks[13]
-    jaw_open = np.linalg.norm(chin - upper_jaw_ref)
-    jaw_open_buffer.append(jaw_open)
-    jaw_open_stats = [np.mean(jaw_open_buffer), np.std(jaw_open_buffer), np.min(jaw_open_buffer), np.max(jaw_open_buffer)] if len(jaw_open_buffer) > 1 else [0.0, 0.0, 0.0, 0.0]
-
-    jaw_vel = abs(jaw_open - jaw_open_buffer[-2]) if len(jaw_open_buffer) > 1 else 0
-    jaw_vel_buffer.append(jaw_vel)
-    jaw_vel_stats = [np.mean(jaw_vel_buffer), np.std(jaw_vel_buffer)] if len(jaw_vel_buffer) > 1 else [0.0, 0.0]
-
-    left_jaw = norm_landmarks[136]
-    right_jaw = norm_landmarks[400]
-    jaw_asym = np.abs(left_jaw[0] - right_jaw[0])
-    jaw_asym_stats = [np.mean([jaw_asym]), np.std([jaw_asym]), np.max([jaw_asym])] if len(jaw_open_buffer) > 1 else [0.0, 0.0, 0.0]
-
-    rapid_count = len(find_peaks(list(jaw_vel_buffer), distance=2)[0]) if len(jaw_vel_buffer) > 1 else 0
-    sig_mov_count = sum(1 for v in jaw_vel_buffer if v > 0.001)
-
-    freq_mean = np.mean(np.abs(fft(list(jaw_open_buffer)))[:buffer_size//2]) if len(jaw_open_buffer) == buffer_size else 0.0
-    peak_freq = np.max(np.abs(fft(list(jaw_open_buffer)))[:buffer_size//2]) if len(jaw_open_buffer) == buffer_size else 0.0
-
-    surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_jaw_idx_surface, right_jaw_idx_surface)
-    l, r = surface['left'], surface['right']
-    jaw_surface_var_buffer.append({'left': l['var'], 'right': r['var']})
-    jaw_surface_dir_buffer.append({'left': l['angle'], 'right': r['angle']})
-
-    lv = [x['left'] for x in list(jaw_surface_var_buffer)[-10:]]
-    rv = [x['right'] for x in list(jaw_surface_var_buffer)[-10:]]
-    la = [x['left'] for x in list(jaw_surface_dir_buffer)[-10:]]
-    ra = [x['right'] for x in list(jaw_surface_dir_buffer)[-10:]]
-
-    vl = [np.mean(lv), np.std(lv), np.min(lv), np.max(lv)] if lv else [0]*4
-    vr = [np.mean(rv), np.std(rv), np.min(rv), np.max(rv)] if rv else [0]*4
-    dl = [np.mean(la), np.std(la)] if len(la) > 1 else [0, 0]
-    dr = [np.mean(ra), np.std(ra)] if len(ra) > 1 else [0, 0]
-
-    return {
-        'Jaw opening (mean)': jaw_open_stats[0],
-        'Jaw opening (std)': jaw_open_stats[1],
-        'Jaw opening (min)': jaw_open_stats[2],
-        'Jaw opening (max)': jaw_open_stats[3],
-        'Jaw velocity (mean)': jaw_vel_stats[0],
-        'Jaw velocity (std)': jaw_vel_stats[1],
-        'Jaw asymmetry (mean)': jaw_asym_stats[0],
-        'Jaw asymmetry (std)': jaw_asym_stats[1],
-        'Jaw asymmetry (max)': jaw_asym_stats[2],
-        'Jaw rapid changes count': rapid_count,
-        'Jaw significant movements count': sig_mov_count,
-        'Jaw frequency mean': freq_mean,
-        'Jaw peak frequency': peak_freq,
-
-        'Jaw Left surface vector magnitude mean': l['mean_mag'],
-        'Jaw Left surface variance (current)': l['var'],
-        'Jaw Left surface variance mean': vl[0],
-        'Jaw Left surface variance std': vl[1],
-        'Jaw Left surface variance min': vl[2],
-        'Jaw Left surface variance max': vl[3],
-        'Jaw Left surface dominant angle mean': dl[0],
-        'Jaw Left surface dominant angle std': dl[1],
-
-        'Jaw Right surface vector magnitude mean': r['mean_mag'],
-        'Jaw Right surface variance (current)': r['var'],
-        'Jaw Right surface variance mean': vr[0],
-        'Jaw Right surface variance std': vr[1],
-        'Jaw Right surface variance min': vr[2],
-        'Jaw Right surface variance max': vr[3],
-        'Jaw Right surface dominant angle mean': dr[0],
-        'Jaw Right surface dominant angle std': dr[1],
     }
 
 # --- LIPS ---
