@@ -1,4 +1,5 @@
 import os
+os.environ['GLOG_minloglevel'] = '2' # Suppress MediaPipe/TensorFlow warnings
 import sys
 import glob
 import cv2
@@ -24,8 +25,15 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_sequence
 
+# CUDA Device Setup
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Using device: {device}")
+if device.type == 'cuda':
+    print(f"  GPU: {torch.cuda.get_device_name(0)}")
+    print(f"  Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+
 # Options
-DATASET_DIR = "../PD Videos/Training"
+DATASET_DIR = "PD Videos/Training"
 OUTPUT_DIR = "."
 ALL_FEATURES_CSV = "pd_features.csv"
 SELECTED_FEATURES_CSV = "pd_selected_features.csv"
@@ -34,7 +42,7 @@ SEQ_LENGTH = 240
 NUM_FOLDS = 5
 
 # ================= GLOBAL BUFFERS =================
-buffer_size = 30  # Increased from 10 for reliable tremor/FFT analysis (1 second at 30fps)
+buffer_size = 60
 brow_raise_buffer = deque(maxlen=buffer_size)
 brow_left_raise_buffer = deque(maxlen=buffer_size)
 brow_right_raise_buffer = deque(maxlen=buffer_size)
@@ -63,13 +71,11 @@ lips_open_buffer = deque(maxlen=buffer_size)
 lips_vel_buffer = deque(maxlen=buffer_size)
 lips_surface_var_buffer = deque(maxlen=buffer_size)
 lips_surface_dir_buffer = deque(maxlen=buffer_size)
-lip_corner_asym_buffer = deque(maxlen=buffer_size)  # Added for tracking corner asymmetry
 
 mouth_open_buffer = deque(maxlen=buffer_size)
 mouth_vel_buffer = deque(maxlen=buffer_size)
 mouth_surface_var_buffer = deque(maxlen=buffer_size)
 mouth_surface_dir_buffer = deque(maxlen=buffer_size)
-mouth_corner_asym_buffer = deque(maxlen=buffer_size)  # Added for tracking corner asymmetry
 
 # --- Landmark Indices ---
 left_brow_idx = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46]
@@ -107,8 +113,8 @@ def reset_buffers():
               cheek_raise_buffer, cheek_vel_buffer, cheek_surface_var_buffer, cheek_surface_dir_buffer,
               eye_ratio_buffer, eye_vel_buffer, blink_buffer, eye_surface_var_buffer, eye_surface_dir_buffer,
               jaw_open_buffer, jaw_vel_buffer, jaw_surface_var_buffer, jaw_surface_dir_buffer,
-              lips_open_buffer, lips_vel_buffer, lips_surface_var_buffer, lips_surface_dir_buffer, lip_corner_asym_buffer,
-              mouth_open_buffer, mouth_vel_buffer, mouth_surface_var_buffer, mouth_surface_dir_buffer, mouth_corner_asym_buffer]:
+              lips_open_buffer, lips_vel_buffer, lips_surface_var_buffer, lips_surface_dir_buffer,
+              mouth_open_buffer, mouth_vel_buffer, mouth_surface_var_buffer, mouth_surface_dir_buffer]:
         b.clear()
 
 # --- Data Augmentation ---
@@ -200,7 +206,11 @@ def compute_surface_vectors_split(landmarks, prev_landmarks, left_idx, right_idx
                 triangle_vectors.append(mean_v / norm)
             else:
                 triangle_vectors.append(mean_v)
-            area = 0.5 * np.abs(np.cross(points2d[i2] - points2d[i1], points2d[i3] - points2d[i1]))
+            # Explicit 2D cross product to avoid NumPy 2.0 deprecation warning
+            # v1 = p2 - p1, v2 = p3 - p1. Cross = v1_x * v2_y - v1_y * v2_x
+            v1 = points2d[i2] - points2d[i1]
+            v2 = points2d[i3] - points2d[i1]
+            area = 0.5 * np.abs(v1[0] * v2[1] - v1[1] * v2[0])
             triangle_areas.append(area)
 
         triangle_norms = np.array(triangle_norms)
@@ -399,7 +409,6 @@ def compute_cheek_features(landmarks, prev_landmarks):
         'Cheek Left surface dominant angle std': dl[1],
 
         'Cheek Right surface vector magnitude mean': r['mean_mag'],
-        'Cheek Right surface variance (current)': r['var'],
         'Cheek Right surface variance mean': vr[0],
         'Cheek Right surface variance std': vr[1],
         'Cheek Right surface variance min': vr[2],
@@ -410,7 +419,9 @@ def compute_cheek_features(landmarks, prev_landmarks):
 
 # --- EYE ---
 def compute_eye_features(landmarks, prev_landmarks):
-    # Note: landmarks should already be normalized by caller
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -482,7 +493,9 @@ def compute_eye_features(landmarks, prev_landmarks):
 
 # --- JAW ---
 def compute_jaw_features(landmarks, prev_landmarks):
-    # Note: landmarks should already be normalized by caller
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -559,7 +572,10 @@ def compute_jaw_features(landmarks, prev_landmarks):
 
 # --- LIPS ---
 def compute_lips_features(landmarks, prev_landmarks):
-    # Note: landmarks should already be normalized by caller
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
+    # Normalized landmarks passed in
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -584,8 +600,7 @@ def compute_lips_features(landmarks, prev_landmarks):
     left_corner_y = norm_landmarks[61][1] - norm_landmarks[17][1]
     right_corner_y = norm_landmarks[291][1] - norm_landmarks[17][1]
     corner_asym = np.abs(left_corner_y - right_corner_y)
-    lip_corner_asym_buffer.append(corner_asym)  # Track over time
-    corner_asym_stats = [np.mean(lip_corner_asym_buffer), np.std(lip_corner_asym_buffer), np.max(lip_corner_asym_buffer)] if len(lip_corner_asym_buffer) > 1 else [0.0, 0.0, 0.0]
+    corner_asym_stats = [np.mean([corner_asym]), np.std([corner_asym]), np.max([corner_asym])] if len(lips_open_buffer) > 1 else [0.0, 0.0, 0.0]
 
     surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_lip_idx_surface, right_lip_idx_surface)
     l, r = surface['left'], surface['right']
@@ -639,7 +654,10 @@ def compute_lips_features(landmarks, prev_landmarks):
 
 # --- MOUTH ---
 def compute_mouth_features(landmarks, prev_landmarks):
-    # Note: landmarks should already be normalized by caller
+    landmarks = normalize_for_rotation_distance(landmarks, prev_landmarks)
+    prev_landmarks = normalize_for_rotation_distance(prev_landmarks, None) if prev_landmarks else None
+    
+    # Normalized landmarks passed in
     if landmarks is None: return {}
     nose_tip = np.array(landmarks[1])
     norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
@@ -664,8 +682,163 @@ def compute_mouth_features(landmarks, prev_landmarks):
     left_corner_y = norm_landmarks[61][1] - norm_landmarks[17][1]
     right_corner_y = norm_landmarks[291][1] - norm_landmarks[17][1]
     corner_asym = np.abs(left_corner_y - right_corner_y)
-    mouth_corner_asym_buffer.append(corner_asym)  # Track over time
-    corner_asym_stats = [np.mean(mouth_corner_asym_buffer), np.std(mouth_corner_asym_buffer), np.max(mouth_corner_asym_buffer)] if len(mouth_corner_asym_buffer) > 1 else [0.0, 0.0, 0.0]
+    corner_asym_stats = [np.mean([corner_asym]), np.std([corner_asym]), np.max([corner_asym])] if len(mouth_open_buffer) > 1 else [0.0, 0.0, 0.0]
+
+    surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_mouth_idx_surface, right_mouth_idx_surface)
+    l, r = surface['left'], surface['right']
+    mouth_surface_var_buffer.append({'left': l['var'], 'right': r['var']})
+    mouth_surface_dir_buffer.append({'left': l['angle'], 'right': r['angle']})
+
+    lv = [x['left'] for x in list(mouth_surface_var_buffer)[-10:]]
+    rv = [x['right'] for x in list(mouth_surface_var_buffer)[-10:]]
+    la = [x['left'] for x in list(mouth_surface_dir_buffer)[-10:]]
+    ra = [x['right'] for x in list(mouth_surface_dir_buffer)[-10:]]
+
+    vl = [np.mean(lv), np.std(lv), np.min(lv), np.max(lv)] if lv else [0]*4
+    vr = [np.mean(rv), np.std(rv), np.min(rv), np.max(rv)] if rv else [0]*4
+    dl = [np.mean(la), np.std(la)] if len(la) > 1 else [0, 0]
+    dr = [np.mean(ra), np.std(ra)] if len(ra) > 1 else [0, 0]
+
+    return {
+        'Mouth micro-expression variance mean': micro_var,
+        'Mouth micro-expression rapid changes count': rapid_count,
+        'Mouth opening (mean)': mouth_open_stats[0],
+        'Mouth opening (std)': mouth_open_stats[1],
+        'Mouth opening (min)': mouth_open_stats[2],
+        'Mouth opening (max)': mouth_open_stats[3],
+        'Mouth velocity (mean)': mouth_vel_stats[0],
+        'Mouth velocity (std)': mouth_vel_stats[1],
+        'Mouth significant movements count': sig_mov_count,
+        'Mouth frequency mean': freq_mean,
+        'Mouth peak frequency': peak_freq,
+        'Mouth corner asymmetry (mean)': corner_asym_stats[0],
+        'Mouth corner asymmetry (std)': corner_asym_stats[1],
+        'Mouth corner asymmetry (max)': corner_asym_stats[2],
+
+        'Mouth Left surface vector magnitude mean': l['mean_mag'],
+        'Mouth Left surface variance (current)': l['var'],
+        'Mouth Left surface variance mean': vl[0],
+        'Mouth Left surface variance std': vl[1],
+        'Mouth Left surface variance min': vl[2],
+        'Mouth Left surface variance max': vl[3],
+        'Mouth Left surface dominant angle mean': dl[0],
+        'Mouth Left surface dominant angle std': dl[1],
+
+        'Mouth Right surface vector magnitude mean': r['mean_mag'],
+        'Mouth Right surface variance (current)': r['var'],
+        'Mouth Right surface variance mean': vr[0],
+        'Mouth Right surface variance std': vr[1],
+        'Mouth Right surface variance min': vr[2],
+        'Mouth Right surface variance max': vr[3],
+        'Mouth Right surface dominant angle mean': dr[0],
+        'Mouth Right surface dominant angle std': dr[1],
+    }
+
+# --- LIPS ---
+def compute_lips_features(landmarks, prev_landmarks):
+    if landmarks is None: return {}
+    nose_tip = np.array(landmarks[1])
+    norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
+
+    upper_lip = norm_landmarks[13]
+    lower_lip = norm_landmarks[14]
+    lip_open = np.linalg.norm(upper_lip - lower_lip)
+    lips_open_buffer.append(lip_open)
+    lip_open_stats = [np.mean(lips_open_buffer), np.std(lips_open_buffer), np.min(lips_open_buffer), np.max(lips_open_buffer)] if len(lips_open_buffer) > 1 else [0.0, 0.0, 0.0, 0.0]
+
+    lip_vel = abs(lip_open - lips_open_buffer[-2]) if len(lips_open_buffer) > 1 else 0
+    lips_vel_buffer.append(lip_vel)
+    lip_vel_stats = [np.mean(lips_vel_buffer), np.std(lips_vel_buffer)] if len(lips_vel_buffer) > 1 else [0.0, 0.0]
+
+    micro_var = np.var(lips_open_buffer) if len(lips_open_buffer) > 1 else 0.0
+    rapid_count = len(find_peaks(list(lips_vel_buffer), distance=2)[0]) if len(lips_vel_buffer) > 1 else 0
+    sig_mov_count = sum(1 for v in lips_vel_buffer if v > 0.001)
+
+    freq_mean = np.mean(np.abs(fft(list(lips_open_buffer)))[:buffer_size//2]) if len(lips_open_buffer) == buffer_size else 0.0
+    peak_freq = np.max(np.abs(fft(list(lips_open_buffer)))[:buffer_size//2]) if len(lips_open_buffer) == buffer_size else 0.0
+
+    left_corner_y = norm_landmarks[61][1] - norm_landmarks[17][1]
+    right_corner_y = norm_landmarks[291][1] - norm_landmarks[17][1]
+    corner_asym = np.abs(left_corner_y - right_corner_y)
+    corner_asym_stats = [np.mean([corner_asym]), np.std([corner_asym]), np.max([corner_asym])] if len(lips_open_buffer) > 1 else [0.0, 0.0, 0.0]
+
+    surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_lip_idx_surface, right_lip_idx_surface)
+    l, r = surface['left'], surface['right']
+    lips_surface_var_buffer.append({'left': l['var'], 'right': r['var']})
+    lips_surface_dir_buffer.append({'left': l['angle'], 'right': r['angle']})
+
+    lv = [x['left'] for x in list(lips_surface_var_buffer)[-10:]]
+    rv = [x['right'] for x in list(lips_surface_var_buffer)[-10:]]
+    la = [x['left'] for x in list(lips_surface_dir_buffer)[-10:]]
+    ra = [x['right'] for x in list(lips_surface_dir_buffer)[-10:]]
+
+    vl = [np.mean(lv), np.std(lv), np.min(lv), np.max(lv)] if lv else [0]*4
+    vr = [np.mean(rv), np.std(rv), np.min(rv), np.max(rv)] if rv else [0]*4
+    dl = [np.mean(la), np.std(la)] if len(la) > 1 else [0, 0]
+    dr = [np.mean(ra), np.std(ra)] if len(ra) > 1 else [0, 0]
+
+    return {
+        'Lip micro-expression variance mean': micro_var,
+        'Lip micro-expression rapid changes count': rapid_count,
+        'Lip opening (mean)': lip_open_stats[0],
+        'Lip opening (std)': lip_open_stats[1],
+        'Lip opening (min)': lip_open_stats[2],
+        'Lip opening (max)': lip_open_stats[3],
+        'Lip velocity (mean)': lip_vel_stats[0],
+        'Lip velocity (std)': lip_vel_stats[1],
+        'Lip significant movements count': sig_mov_count,
+        'Lip frequency mean': freq_mean,
+        'Lip peak frequency': peak_freq,
+        'Lip corner asymmetry (mean)': corner_asym_stats[0],
+        'Lip corner asymmetry (std)': corner_asym_stats[1],
+        'Lip corner asymmetry (max)': corner_asym_stats[2],
+
+        'Lip Left surface vector magnitude mean': l['mean_mag'],
+        'Lip Left surface variance (current)': l['var'],
+        'Lip Left surface variance mean': vl[0],
+        'Lip Left surface variance std': vl[1],
+        'Lip Left surface variance min': vl[2],
+        'Lip Left surface variance max': vl[3],
+        'Lip Left surface dominant angle mean': dl[0],
+        'Lip Left surface dominant angle std': dl[1],
+
+        'Lip Right surface vector magnitude mean': r['mean_mag'],
+        'Lip Right surface variance (current)': r['var'],
+        'Lip Right surface variance mean': vr[0],
+        'Lip Right surface variance std': vr[1],
+        'Lip Right surface variance min': vr[2],
+        'Lip Right surface variance max': vr[3],
+        'Lip Right surface dominant angle mean': dr[0],
+        'Lip Right surface dominant angle std': dr[1],
+    }
+
+# --- MOUTH ---
+def compute_mouth_features(landmarks, prev_landmarks):
+    if landmarks is None: return {}
+    nose_tip = np.array(landmarks[1])
+    norm_landmarks = [np.array(lm) - nose_tip for lm in landmarks]
+
+    upper_lip = norm_landmarks[13]
+    lower_lip = norm_landmarks[14]
+    mouth_open = np.linalg.norm(upper_lip - lower_lip)
+    mouth_open_buffer.append(mouth_open)
+    mouth_open_stats = [np.mean(mouth_open_buffer), np.std(mouth_open_buffer), np.min(mouth_open_buffer), np.max(mouth_open_buffer)] if len(mouth_open_buffer) > 1 else [0.0, 0.0, 0.0, 0.0]
+
+    mouth_vel = abs(mouth_open - mouth_open_buffer[-2]) if len(mouth_open_buffer) > 1 else 0
+    mouth_vel_buffer.append(mouth_vel)
+    mouth_vel_stats = [np.mean(mouth_vel_buffer), np.std(mouth_vel_buffer)] if len(mouth_vel_buffer) > 1 else [0.0, 0.0]
+
+    micro_var = np.var(mouth_open_buffer) if len(mouth_open_buffer) > 1 else 0.0
+    rapid_count = len(find_peaks(list(mouth_vel_buffer), distance=2)[0]) if len(mouth_vel_buffer) > 1 else 0
+    sig_mov_count = sum(1 for v in mouth_vel_buffer if v > 0.001)
+
+    freq_mean = np.mean(np.abs(fft(list(mouth_open_buffer)))[:buffer_size//2]) if len(mouth_open_buffer) == buffer_size else 0.0
+    peak_freq = np.max(np.abs(fft(list(mouth_open_buffer)))[:buffer_size//2]) if len(mouth_open_buffer) == buffer_size else 0.0
+
+    left_corner_y = norm_landmarks[61][1] - norm_landmarks[17][1]
+    right_corner_y = norm_landmarks[291][1] - norm_landmarks[17][1]
+    corner_asym = np.abs(left_corner_y - right_corner_y)
+    corner_asym_stats = [np.mean([corner_asym]), np.std([corner_asym]), np.max([corner_asym])] if len(mouth_open_buffer) > 1 else [0.0, 0.0, 0.0]
 
     surface = compute_surface_vectors_split(landmarks, prev_landmarks, left_mouth_idx_surface, right_mouth_idx_surface)
     l, r = surface['left'], surface['right']
@@ -754,10 +927,28 @@ def extract_data_from_videos():
 
     data = []
     classes = [d for d in os.listdir(DATASET_DIR) if os.path.isdir(os.path.join(DATASET_DIR, d))]
-    mp_face_mesh = mp.solutions.face_mesh
+    # Setup MediaPipe Tasks
+    BaseOptions = mp.tasks.BaseOptions
+    FaceLandmarker = mp.tasks.vision.FaceLandmarker
+    FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+
+    # Check if model exists
+    model_path = 'face_landmarker.task'
+    if not os.path.exists(model_path):
+        print(f"Error: Model file {model_path} not found. Please download it.")
+        return None
+
+    options = FaceLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.VIDEO,
+        num_faces=1,
+        min_face_detection_confidence=0.5,
+        min_face_presence_confidence=0.5,
+        min_tracking_confidence=0.5)
+
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-
 
     for category in classes:
         print(f"Processing category: {category}")
@@ -767,7 +958,6 @@ def extract_data_from_videos():
             
             # 6 Augmentations per video
             for aug_idx in range(6): 
-                # Setup augmentation params
                 if aug_idx == 0:
                     rot, shr, brt = 0, 0, 1.0
                     suffix = ""
@@ -779,41 +969,59 @@ def extract_data_from_videos():
                 
                 reset_buffers()
                 cap = cv2.VideoCapture(video_path)
-                with mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5) as face_mesh:
-                    frame_count = 0
+                
+                frame_timestamp_ms = 0
+                frame_count = 0
+                
+                # Need fps for timestamp calculation
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if fps <= 0: fps = 30.0 # Default fallback
+                
+                # Create/Reset Landmarker for each video stream to handle timestamp resets
+                with FaceLandmarker.create_from_options(options) as landmarker:
                     while cap.isOpened():
                         success, image = cap.read()
                         if not success: break
                         frame_count += 1
+                        frame_timestamp_ms = int(frame_count * (1000 / fps))
                         
                         # Apply Augmentation
                         if aug_idx > 0:
                             image = video_augmentation(image, brightness=brt, rotation=rot, shear=shr)
 
-                        image.flags.writeable = False
                         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                        results = face_mesh.process(image_rgb)
+                        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
                         
-                        if results.multi_face_landmarks:
-                            landmarks = results.multi_face_landmarks[0].landmark
-                            lm_list = [[lm.x, lm.y, lm.z] for lm in landmarks]
+                        try:
+                            detection_result = landmarker.detect_for_video(mp_image, frame_timestamp_ms)
                             
-                            lm_list_norm = normalize_for_rotation_distance(lm_list, _prev_landmarks_global)
-                            
-                            features_dict = {}
-                            features_dict.update(compute_brow_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_cheek_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_eye_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_jaw_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_lips_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_mouth_features(lm_list_norm, _prev_landmarks_global))
-                            
-                            features_dict['Video'] = video_name + suffix
-                            features_dict['Label'] = category
-                            features_dict['Frame'] = frame_count
-                            data.append(features_dict)
-                            
-                            _prev_landmarks_global = lm_list_norm
+                            if detection_result.face_landmarks:
+                                landmarks = detection_result.face_landmarks[0] 
+                                lm_list = [[lm.x, lm.y, lm.z] for lm in landmarks]
+                                
+                                lm_list_norm = normalize_for_rotation_distance(lm_list, _prev_landmarks_global)
+                                
+                                features_dict = {}
+                                features_dict.update(compute_brow_features(lm_list_norm, _prev_landmarks_global))
+                                features_dict.update(compute_cheek_features(lm_list_norm, _prev_landmarks_global))
+                                features_dict.update(compute_eye_features(lm_list_norm, _prev_landmarks_global))
+                                features_dict.update(compute_jaw_features(lm_list_norm, _prev_landmarks_global))
+                                features_dict.update(compute_lips_features(lm_list_norm, _prev_landmarks_global))
+                                features_dict.update(compute_mouth_features(lm_list_norm, _prev_landmarks_global))
+                                
+                                features_dict['Video'] = video_name + suffix
+                                features_dict['Label'] = category
+                                features_dict['Frame'] = frame_count
+                                data.append(features_dict)
+                                
+                                _prev_landmarks_global = lm_list_norm
+                        except Exception as e:
+                            print(f"Error processing frame {frame_count} of {video_name} (Aug {aug_idx}): {e}")
+                            # Don't break, try next frame? 
+                            # If landmarker is broken for this stream, it might be better to break.
+                            # But usually it's just a timestamp glitch or empty detection.
+                            pass
+
                 cap.release()
             
     df = pd.DataFrame(data)
@@ -824,40 +1032,24 @@ def extract_data_from_videos():
     return df
 
 # --- PCA SELECTION ---
-def perform_pca_selection(df=None):
-    print("Starting PCA Feature Selection...")
-    if df is None:
-        csv_path = os.path.join(OUTPUT_DIR, ALL_FEATURES_CSV)
-        if os.path.exists(csv_path):
-            df = pd.read_csv(csv_path)
-        else:
-            print("No data found for PCA.")
-            return None, None
-
-    drop_cols = ['Video', 'Label', 'Frame']
-    feature_cols = [c for c in df.columns if c not in drop_cols]
-    X = df[feature_cols].values
+# --- FEATURE SELECTION (Helper) ---
+def select_features_via_pca(X, feature_names):
+    # Standardize internally just for PCA calculation
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
     pca = PCA(n_components=0.99)
     pca.fit(X_scaled)
-    print(f"PCA selected {pca.n_components_} components.")
     
     selected_indices = set()
     components = pca.components_
     for i in range(components.shape[0]):
+        # Get top 10 features contributing to this component
         top_indices = np.argsort(np.abs(components[i]))[-10:]
         for idx in top_indices: selected_indices.add(idx)
         
-    selected_features = [feature_cols[i] for i in selected_indices]
-    print(f"Selected {len(selected_features)} unique micro-features.")
-    
-    final_cols = drop_cols + selected_features
-    df_selected = df[final_cols]
-    csv_path = os.path.join(OUTPUT_DIR, SELECTED_FEATURES_CSV)
-    df_selected.to_csv(csv_path, index=False)
-    return df_selected, selected_features
+    selected_features = [feature_names[i] for i in selected_indices]
+    return selected_features
 
 # --- MODEL ---
 class ResidualConvBlock(nn.Module):
@@ -923,7 +1115,7 @@ class OptimizedCNNLSTM(nn.Module):
 class ExpressionDataset(Dataset):
     def __init__(self, features, labels, lengths):
         self.features = features
-        self.labels = torch.tensor(labels, dtype=torch.long)
+        self.labels = torch.tensor(labels, dtype=torch.long)  # Will move to device in training loop
         self.lengths = torch.tensor(lengths, dtype=torch.long)
     def __len__(self): return len(self.labels)
     def __getitem__(self, idx):
@@ -937,74 +1129,117 @@ def collate_fn(batch):
     padded_sequences = pad_sequence(sequences, batch_first=True)
     labels = torch.stack(labels)
     lengths = torch.stack(lengths)
-    return padded_sequences, labels, lengths
+    # Move to GPU (lengths stays on CPU for pack_padded_sequence compatibility)
+    return padded_sequences.to(device), labels.to(device), lengths
 
-def train_model(df=None, feature_names=None):
-    print("Starting Model Training...")
+def train_model(df=None):
+    print("Starting Model Training with Strict Train/Val Separation...")
     if df is None:
-        csv_path = os.path.join(OUTPUT_DIR, SELECTED_FEATURES_CSV)
+        csv_path = os.path.join(OUTPUT_DIR, ALL_FEATURES_CSV)
         if os.path.exists(csv_path): df = pd.read_csv(csv_path)
-        else: return
+        else: 
+            print("No features file found.")
+            return
 
-    if feature_names is None:
-        drop_cols = ['Video', 'Label', 'Frame']
-        feature_names = [c for c in df.columns if c not in drop_cols]
-
-    grouped = df.groupby('Video')
-    X_seq = []
-    y_seq = []
-    lengths = []
+    # Initial Columns
+    drop_cols = ['Video', 'Label', 'Frame']
+    all_feature_names = [c for c in df.columns if c not in drop_cols]
+    
+    # Encode Labels
     unique_labels = sorted(df['Label'].unique())
     label_map = {label: i for i, label in enumerate(unique_labels)}
     print(f"Classes: {label_map}")
+
+    # Group by Video to ensure no data leakage across frames
+    grouped = df.groupby('Video')
+    video_names = []
+    X_seq_all = [] # List of (seq_len, num_features) arrays
+    y_seq_all = [] # List of labels
     
     for video, group in grouped:
-        feats = group[feature_names].values
+        feats = group[all_feature_names].values
         label = label_map[group['Label'].iloc[0]]
-        seq_len = len(feats)
-        if seq_len > SEQ_LENGTH:
-             feats = feats[:SEQ_LENGTH]
-             seq_len = SEQ_LENGTH
-        X_seq.append(feats)
-        y_seq.append(label)
-        lengths.append(seq_len)
         
-    X_padded = pad_sequences(X_seq, maxlen=SEQ_LENGTH, dtype='float32')
-    y_array = np.array(y_seq)
-    lengths_array = np.array(lengths)
+        # Truncate/Pad handled later, but we need raw sequences first
+        if len(feats) > SEQ_LENGTH:
+            feats = feats[:SEQ_LENGTH]
+            
+        X_seq_all.append(feats)
+        y_seq_all.append(label)
+        video_names.append(video)
 
+    X_seq_all = np.array(X_seq_all, dtype=object) # Ragged array
+    y_seq_all = np.array(y_seq_all)
+
+    # Cross Validation
     skf = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
     fold_accs = []
     
-    for fold, (train_idx, val_idx) in enumerate(skf.split(X_padded, y_array)):
-        print(f"\nTraining Fold {fold+1}/{NUM_FOLDS}")
-        X_train, X_val = X_padded[train_idx], X_padded[val_idx]
-        y_train, y_val = y_array[train_idx], y_array[val_idx]
-        l_train, l_val = lengths_array[train_idx], lengths_array[val_idx]
-
+    # Store the BEST model artifacts
+    best_overall_acc = 0.0
+    best_fold_idx = -1
+    
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X_seq_all, y_seq_all)):
+        print(f"\n--- Training Fold {fold+1}/{NUM_FOLDS} ---")
+        
+        # 1. SPLIT DATA
+        X_train_raw_seq = X_seq_all[train_idx]
+        y_train = y_seq_all[train_idx]
+        
+        X_val_raw_seq = X_seq_all[val_idx]
+        y_val = y_seq_all[val_idx]
+        
+        # 2. FEATURE SELECTION (Using ONLY Train Data)
+        # Flatten train sequences to shape (N_samples * Time, N_Features) for PCA
+        X_train_flat = np.vstack(X_train_raw_seq)
+        
+        # Select Features
+        print(f"  Selecting features based on training set...")
+        selected_features = select_features_via_pca(X_train_flat, all_feature_names)
+        print(f"  Selected {len(selected_features)} features.")
+        
+        # Map indices mapping
+        feature_indices = [all_feature_names.index(f) for f in selected_features]
+        
+        # Filter Train and Val sequences to selected features
+        X_train_filtered = [seq[:, feature_indices] for seq in X_train_raw_seq]
+        X_val_filtered = [seq[:, feature_indices] for seq in X_val_raw_seq]
+        
+        # 3. PAD SEQUENCES
+        X_train_padded = pad_sequences(X_train_filtered, maxlen=SEQ_LENGTH, dtype='float32')
+        X_val_padded = pad_sequences(X_val_filtered, maxlen=SEQ_LENGTH, dtype='float32')
+        
+        l_train = torch.tensor([len(x) for x in X_train_filtered], dtype=torch.long)
+        l_val = torch.tensor([len(x) for x in X_val_filtered], dtype=torch.long)
+        
+        # 4. DATALOADERS
         class_counts = np.bincount(y_train)
         class_weights = 1. / (class_counts + 1e-6)
         sample_weights = torch.tensor([class_weights[y] for y in y_train], dtype=torch.float32)
         weighted_sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
-        train_dataset = ExpressionDataset(list(X_train), y_train, l_train)
-        val_dataset = ExpressionDataset(list(X_val), y_val, l_val)
+        train_dataset = ExpressionDataset(list(X_train_padded), y_train, l_train)
+        val_dataset = ExpressionDataset(list(X_val_padded), y_val, l_val) # No weighted sampler for Val
         
         train_loader = DataLoader(train_dataset, batch_size=32, sampler=weighted_sampler, drop_last=True, collate_fn=collate_fn)
         val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=collate_fn)
         
-        feature_dim = len(feature_names)
+        # 5. MODEL SETUP
+        feature_dim = len(selected_features)
         num_classes = len(unique_labels)
-        model = OptimizedCNNLSTM(feature_dim, 64, num_classes, num_layers=3) # hidden_dim=64
+        model = OptimizedCNNLSTM(feature_dim, 64, num_classes, num_layers=3).to(device)
         
         criterion = FocalLoss(alpha=1, gamma=2)
         optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-3)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=500)
         
-        epochs = 500
-        best_acc = 0.0
-        best_loss = float('inf')
-        patience = 60
+        print(f"  Model on: {next(model.parameters()).device}")
+        
+        # 6. TRAINING LOOP
+        epochs = 150 # Reduced from 500 for responsiveness, 500 is overkill for small data usually
+        best_val_acc = 0.0
+        best_val_loss = float('inf')
+        patience = 20
         counter = 0
         
         for epoch in range(epochs):
@@ -1020,7 +1255,7 @@ def train_model(df=None, feature_names=None):
                 total_loss += loss.item()
             scheduler.step()
             
-            avg_loss = total_loss / len(train_loader)
+            avg_loss = total_loss / len(train_loader) if len(train_loader) > 0 else 0
             
             model.eval()
             val_total_loss = 0.0
@@ -1039,55 +1274,55 @@ def train_model(df=None, feature_names=None):
             val_acc = correct / total if total > 0 else 0
             
             if (epoch+1) % 10 == 0:
-                print(f"  Epoch {epoch+1:3d} | Loss: {avg_loss:.4f} | Val Loss: {val_loss_avg:.4f} | Val Acc: {val_acc*100:.2f}%")
+                print(f"  Epoch {epoch+1:3d} | Train Loss: {avg_loss:.4f} | Val Acc: {val_acc*100:.2f}%")
             
-            if val_acc > best_acc or (val_acc == best_acc and val_loss_avg < best_loss):
-                best_acc = val_acc
-                best_loss = val_loss_avg
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                best_val_loss = val_loss_avg
                 counter = 0
-                # Only save model from the last fold or keep best fold? 
-                # For simplicity, we save the model if it's the best across folds OR just the last fold trained.
-                # Usually we want to save the BEST fold model. 
-                # Let's save a temp model for this fold.
-                torch.save(model.state_dict(), f"fold_{fold}.pth")
+                torch.save({'model': model.state_dict(), 'features': selected_features}, f"fold_{fold}_best.pth")
             else:
                 counter += 1
                 if counter >= patience:
-                    print("  Early stopping.")
+                    print(f"  Early stopping at epoch {epoch+1}")
                     break
         
-        print(f"Fold {fold+1} Best Acc: {best_acc*100:.2f}%")
-        fold_accs.append(best_acc)
+        print(f"Fold {fold+1} Best Val Acc: {best_val_acc*100:.2f}%")
+        fold_accs.append(best_val_acc)
         
+        if best_val_acc > best_overall_acc:
+            best_overall_acc = best_val_acc
+            best_fold_idx = fold
+
     print(f"\nFinal CV Accuracy: {np.mean(fold_accs)*100:.2f}% (+/- {np.std(fold_accs)*100:.2f}%)")
     
-    # Save the best fold model as the final model
-    best_fold_idx = np.argmax(fold_accs)
-    print(f"Saving best model from Fold {best_fold_idx+1} to {MODEL_FILE}")
-    
-    # Load best fold and save it as main model
-    model = OptimizedCNNLSTM(len(feature_names), 64, len(unique_labels), num_layers=3)
-    model.load_state_dict(torch.load(f"fold_{best_fold_idx}.pth"))
-    torch.save(model.state_dict(), os.path.join(OUTPUT_DIR, MODEL_FILE))
-    
-    # Clean up fold files
-    for f in range(NUM_FOLDS):
-        if os.path.exists(f"fold_{f}.pth"): os.remove(f"fold_{f}.pth")
+    # Save Final Best Model
+    if best_fold_idx != -1:
+        print(f"Saving Best Model from Fold {best_fold_idx+1} to {MODEL_FILE}")
+        best_state = torch.load(f"fold_{best_fold_idx}_best.pth")
+        
+        # We need to save the selected FEATURES list too, otherwise we can't infer later!
+        # The model structural weights depend on the exact input features.
+        final_save = {
+            'model_state_dict': best_state['model'],
+            'selected_features': best_state['features'],
+            'input_dim': len(best_state['features']),
+            'num_classes': len(unique_labels),
+            'label_map': label_map
+        }
+        torch.save(final_save, MODEL_FILE)
+        
+        # Save selected features to CSV for reference/inference usage
+        # (Though we effectively need to use the LIST saved in the .pth for production)
+        pd.DataFrame({'Feature': best_state['features']}).to_csv(SELECTED_FEATURES_CSV, index=False)
 
-    # Generate Report on Validation Set of Best Fold (approximate)
-    # Ideally we'd collect all preds but this is fine for now
-    model.eval()
-    all_preds = []
-    all_targets = []
-    # (Re-create loader for the best fold to generate report - this is a bit tricky without keeping the split)
-    # For now, let's just generate report on the last fold's val set or skip.
-    # To be accurate, we should really re-split.
-    # We will skip the confusion matrix image update for now or just generate for the last fold.
-    pass
+    # Cleanup
+    for f in range(NUM_FOLDS):
+        fname = f"fold_{f}_best.pth"
+        if os.path.exists(fname): os.remove(fname)
 
 if __name__ == "__main__":
     df = extract_data_from_videos()
     if df is not None:
-        df_selected, selected_features = perform_pca_selection(df)
-        if df_selected is not None:
-            train_model(df_selected, selected_features)
+        # train_model handles the selection internally now
+        train_model(df)

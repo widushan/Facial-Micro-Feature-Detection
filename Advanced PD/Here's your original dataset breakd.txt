@@ -1,0 +1,21 @@
+Here's your original dataset breakdown (without augmentation):
+
+Original Dataset (No Augmentation)
+Category	Videos	Frames	Avg Frames/Video
+Healthy	36	6,728	~187
+Parkinson	36	6,671	~185
+Total	72	13,399	~186
+Frame Statistics
+Mean frames per video: 186.1
+Min: 3 frames (likely a very short/problematic video)
+Max: 240 frames (capped at SEQ_LENGTH)
+Augmentation Breakdown
+Metric	Value
+Original frames	13,399
+Total frames (with 6x augmentation)	80,402
+Augmentation ratio	6.0x (1 original + 5 augmented)
+So when looking at your pca_analysis.png:
+
+Healthy ~40,378 = 6,728 × 6 ≈ 40,368 ✓
+Parkinson ~40,024 = 6,671 × 6 ≈ 40,026 ✓
+The numbers match! Your dataset is balanced with 36 videos per class, approximately 185-187 frames each on average
