@@ -1,0 +1,276 @@
+PS E:\SLTC Lectures\Sem 7\FYP\Detect Facial MicroFeatures\FYP - Parkinson Disease\Facial-Micro-Feature-Detection\Parkinson-Pipeline> python no_augment_pca.py
+============================================================
+PD FACE DATASET ANALYSIS TOOL
+============================================================
+Loaded 13406 rows from .\pd_features_no_aug.csv
+
+============================================================
+DATASET COMPOSITION ANALYSIS
+============================================================
+
+Total samples (frames): 13,406
+Total features: 172
+
+--- Label Distribution ---
+  Healthy: 6,730 samples (50.2%)
+  Parkinson: 6,676 samples (49.8%)
+
+--- Video Distribution ---
+  Healthy: 36 unique videos
+  Parkinson: 36 unique videos
+
+--- Augmentation Stats ---
+  Original videos: 72
+  Augmented versions: 0
+  Augmentation ratio: 0.0x
+
+--- Frames per Video ---
+  Mean: 186.2
+  Std: 38.7
+  Min: 3
+  Max: 240
+
+============================================================
+TRAIN/TEST SPLIT ANALYSIS
+============================================================
+
+--- Training Set ---
+  Videos: 57
+  Samples (frames): 10,995
+    Healthy: 28 videos (49.1%)
+    Parkinson: 29 videos (50.9%)
+
+--- Test Set ---
+  Videos: 15
+  Samples (frames): 2,411
+    Healthy: 8 videos (53.3%)
+    Parkinson: 7 videos (46.7%)
+
+============================================================
+5-FOLD CROSS-VALIDATION ANALYSIS
+============================================================
+
+--- Fold 1 ---
+  Train: 57 videos | Val: 15 videos
+  Train distribution: {'Parkinson': 28, 'Healthy': 29}
+  Val distribution: {'Healthy': 7, 'Parkinson': 8}
+
+--- Fold 2 ---
+  Train: 57 videos | Val: 15 videos
+  Train distribution: {'Parkinson': 29, 'Healthy': 28}
+  Val distribution: {'Parkinson': 7, 'Healthy': 8}
+
+--- Fold 3 ---
+  Train: 58 videos | Val: 14 videos
+  Train distribution: {'Parkinson': 29, 'Healthy': 29}
+  Val distribution: {'Healthy': 7, 'Parkinson': 7}
+
+--- Fold 4 ---
+  Train: 58 videos | Val: 14 videos
+  Train distribution: {'Parkinson': 29, 'Healthy': 29}
+  Val distribution: {'Parkinson': 7, 'Healthy': 7}
+
+--- Fold 5 ---
+  Train: 58 videos | Val: 14 videos
+  Train distribution: {'Parkinson': 29, 'Healthy': 29}
+  Val distribution: {'Parkinson': 7, 'Healthy': 7}
+
+==================================================
+ 2. PCA Analysis Results
+==================================================
+
+Number of components to explain 95% variance: 66
+
+PCA Explained Variance Ratio (Top 5):
+ PC1: 0.1985
+ PC2: 0.0925
+ PC3: 0.0639
+ PC4: 0.0523
+ PC5: 0.0413
+
+Top features contributing to PC1:
+ 1. Cheek velocity (mean): 0.1232
+ 2. Mouth Left surface variance mean: 0.1230
+ 3. Cheek Right surface variance mean: 0.1208
+ 4. Lip Left surface variance mean: 0.1192
+ 5. Jaw velocity (mean): 0.1179
+ 6. Mouth Left surface variance max: 0.1148
+ 7. Jaw velocity (std): 0.1142
+ 8. Mouth Left surface variance std: 0.1138
+ 9. Jaw opening (std): 0.1124
+ 10. Mouth opening (max): 0.1109
+
+============================================================
+FEATURE SELECTION (PCA-based)
+============================================================
+
+Selected 163 features out of 172 total
+Reduction: 5.2%
+
+Selected features:
+   1. Blink rate
+   2. Brow Left surface dominant angle mean
+   3. Brow Left surface dominant angle std
+   4. Brow Left surface variance (current)
+   5. Brow Left surface variance max
+   6. Brow Left surface variance mean
+   7. Brow Left surface variance min
+   8. Brow Left surface variance std
+   9. Brow Left surface vector magnitude mean
+  10. Brow Right surface dominant angle mean
+  11. Brow Right surface dominant angle std
+  12. Brow Right surface variance (current)
+  13. Brow Right surface variance max
+  14. Brow Right surface variance mean
+  15. Brow Right surface variance min
+  16. Brow Right surface variance std
+  17. Brow Right surface vector magnitude mean
+  18. Brow asymmetry (mean)
+  19. Brow frequency mean
+  20. Brow micro-expression rapid changes count
+  21. Brow micro-expression variance mean
+  22. Brow peak frequency
+  23. Brow tremor index
+  24. Brow tremor power
+  25. Brow velocity (mean)
+  26. Brow velocity (std)
+  27. Cheek Left surface dominant angle mean
+  28. Cheek Left surface dominant angle std
+  29. Cheek Left surface variance (current)
+  30. Cheek Left surface variance max
+  31. Cheek Left surface variance mean
+  32. Cheek Left surface variance min
+  33. Cheek Left surface variance std
+  34. Cheek Left surface vector magnitude mean
+  35. Cheek Right surface dominant angle mean
+  36. Cheek Right surface dominant angle std
+  37. Cheek Right surface variance (current)
+  38. Cheek Right surface variance max
+  39. Cheek Right surface variance mean
+  40. Cheek Right surface variance min
+  41. Cheek Right surface variance std
+  42. Cheek Right surface vector magnitude mean
+  43. Cheek asymmetry (mean)
+  44. Cheek frequency mean
+  45. Cheek puff micro-expression variance mean
+  46. Cheek puff rapid changes count
+  47. Cheek raise (mean)
+  48. Cheek raise (std)
+  49. Cheek tremor index
+  50. Cheek tremor power
+  51. Cheek velocity (mean)
+  52. Cheek velocity (std)
+  53. Eye Left surface dominant angle mean
+  54. Eye Left surface dominant angle std
+  55. Eye Left surface variance (current)
+  56. Eye Left surface variance max
+  57. Eye Left surface variance mean
+  58. Eye Left surface variance min
+  59. Eye Left surface variance std
+  60. Eye Left surface vector magnitude mean
+  61. Eye Right surface dominant angle mean
+  62. Eye Right surface dominant angle std
+  63. Eye Right surface variance (current)
+  64. Eye Right surface variance max
+  65. Eye Right surface variance mean
+  66. Eye Right surface variance min
+  67. Eye Right surface variance std
+  68. Eye Right surface vector magnitude mean
+  69. Eye ratio (mean)
+  70. Eye ratio (std)
+  71. Eye squint velocity (mean)
+  72. Eye squint velocity (std)
+  73. Eye widening micro-expression variance mean
+  74. Eye widening rapid changes count
+  75. Inner brow raise (mean)
+  76. Inner brow raise (std)
+  77. Jaw Left surface dominant angle mean
+  78. Jaw Left surface dominant angle std
+  79. Jaw Left surface variance (current)
+  80. Jaw Left surface variance max
+  81. Jaw Left surface variance min
+  82. Jaw Left surface vector magnitude mean
+  83. Jaw Right surface dominant angle mean
+  84. Jaw Right surface dominant angle std
+  85. Jaw Right surface variance (current)
+  86. Jaw Right surface variance max
+  87. Jaw Right surface variance mean
+  88. Jaw Right surface variance min
+  89. Jaw Right surface variance std
+  90. Jaw Right surface vector magnitude mean
+  91. Jaw asymmetry (max)
+  92. Jaw asymmetry (mean)
+  93. Jaw frequency mean
+  94. Jaw opening (max)
+  95. Jaw opening (mean)
+  96. Jaw opening (min)
+  97. Jaw opening (std)
+  98. Jaw peak frequency
+  99. Jaw rapid changes count
+  100. Jaw significant movements count
+  101. Jaw velocity (mean)
+  102. Jaw velocity (std)
+  103. Left brow raise (mean)
+  104. Left brow raise (std)
+  105. Lip Left surface dominant angle mean
+  106. Lip Left surface dominant angle std
+  107. Lip Left surface variance (current)
+  108. Lip Left surface variance max
+  109. Lip Left surface variance mean
+  110. Lip Left surface variance min
+  111. Lip Left surface variance std
+  112. Lip Left surface vector magnitude mean
+  113. Lip Right surface dominant angle mean
+  114. Lip Right surface dominant angle std
+  115. Lip Right surface variance (current)
+  116. Lip Right surface variance max
+  117. Lip Right surface variance mean
+  118. Lip Right surface variance min
+  119. Lip Right surface variance std
+  120. Lip Right surface vector magnitude mean
+  121. Lip corner asymmetry (max)
+  122. Lip corner asymmetry (mean)
+  123. Lip corner asymmetry (std)
+  124. Lip micro-expression rapid changes count
+  125. Lip micro-expression variance mean
+  126. Lip opening (max)
+  127. Lip opening (mean)
+  128. Lip opening (min)
+  129. Lip peak frequency
+  130. Lip significant movements count
+  131. Lip velocity (mean)
+  132. Lip velocity (std)
+  133. Mouth Left surface dominant angle mean
+  134. Mouth Left surface dominant angle std
+  135. Mouth Left surface variance (current)
+  136. Mouth Left surface variance max
+  137. Mouth Left surface variance mean
+  138. Mouth Left surface variance min
+  139. Mouth Left surface variance std
+  140. Mouth Left surface vector magnitude mean
+  141. Mouth Right surface dominant angle mean
+  142. Mouth Right surface dominant angle std
+  143. Mouth Right surface variance (current)
+  144. Mouth Right surface variance max
+  145. Mouth Right surface variance mean
+  146. Mouth Right surface variance min
+  147. Mouth Right surface variance std
+  148. Mouth Right surface vector magnitude mean
+  149. Mouth corner asymmetry (max)
+  150. Mouth corner asymmetry (mean)
+  151. Mouth corner asymmetry (std)
+  152. Mouth micro-expression rapid changes count
+  153. Mouth micro-expression variance mean
+  154. Mouth opening (max)
+  155. Mouth opening (mean)
+  156. Mouth opening (min)
+  157. Mouth peak frequency
+============================================================
+GENERATING VISUALIZATION
+============================================================
+
+Plot saved to: pca_analysis_dashboard_no_aug.png
+
+============================================================
+ANALYSIS COMPLETE
+============================================================

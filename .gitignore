@@ -13,7 +13,12 @@ Expression-Pipeline/landmark_facial_expression_model.pth
 Expression-Pipeline/all_features.csv
 Expression-Pipeline/selected_features.csv
 Parkinson-Pipeline/pd_detection_model.pth
+Parkinson-Pipeline/pd_detection_model_no_aug.pth
 Parkinson-Pipeline/pd_features.csv
+Parkinson-Pipeline/pd_features_no_aug.csv
 Parkinson-Pipeline/pd_selected_features.csv
+Parkinson-Pipeline/pd_selected_features_no_aug.csv
+Parkinson-Pipeline/pd_test_features.csv
+
 
 

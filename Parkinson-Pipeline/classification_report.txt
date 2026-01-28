@@ -1,0 +1,10 @@
+Classification Report (Best Model - Fold 2)
+============================================================
+              precision    recall  f1-score   support
+
+     Healthy       0.78      0.88      0.82         8
+   Parkinson       0.83      0.71      0.77         7
+
+    accuracy                           0.80        15
+   macro avg       0.81      0.79      0.80        15
+weighted avg       0.80      0.80      0.80        15

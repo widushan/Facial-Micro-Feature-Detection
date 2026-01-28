@@ -1,6 +1,6 @@
 """
-PCA Analysis and Dataset Composition Tool
-Analyzes the extracted features from pd.py
+PCA Analysis and Dataset Composition Tool (No Augmentation)
+Analyzes the extracted features from no_augment_pd.py
 """
 import os
 import numpy as np
@@ -12,9 +12,9 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from collections import Counter
 
-# Configuration - Match pd.py settings
+# Configuration - Match no_augment_pd.py settings
 OUTPUT_DIR = "."
-ALL_FEATURES_CSV = "pd_features.csv"
+ALL_FEATURES_CSV = "pd_features_no_aug.csv"
 SEQ_LENGTH = 240
 NUM_FOLDS = 5
 TEST_SIZE = 0.2
@@ -24,7 +24,7 @@ def load_data():
     """Load the extracted features from CSV"""
     csv_path = os.path.join(OUTPUT_DIR, ALL_FEATURES_CSV)
     if not os.path.exists(csv_path):
-        print(f"Error: {csv_path} not found. Run pd.py first to extract features.")
+        print(f"Error: {csv_path} not found. Run no_augment_pd.py first to extract features.")
         return None
     
     df = pd.read_csv(csv_path)
@@ -264,7 +264,7 @@ def select_features_via_pca(X, feature_names, variance_threshold=0.99):
     selected_features = [feature_names[i] for i in selected_indices]
     return selected_features
 
-def plot_pca_results(pca, cumulative_var, df, X_scaled, save_path="pca_analysis.png"):
+def plot_pca_results(pca, cumulative_var, df, X_scaled, save_path="pca_analysis_dashboard_no_aug.png"):
     """Generate PCA visualization plots"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
     

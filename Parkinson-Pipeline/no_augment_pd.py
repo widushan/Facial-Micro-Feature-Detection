@@ -27,9 +27,9 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pad_se
 # Options
 DATASET_DIR = "../PD Videos/Training"
 OUTPUT_DIR = "."
-ALL_FEATURES_CSV = "pd_features.csv"
-SELECTED_FEATURES_CSV = "pd_selected_features.csv"
-MODEL_FILE = "pd_detection_model.pth"
+ALL_FEATURES_CSV = "pd_features_no_aug.csv"
+SELECTED_FEATURES_CSV = "pd_selected_features_no_aug.csv"
+MODEL_FILE = "pd_detection_model_no_aug.pth"
 SEQ_LENGTH = 240
 NUM_FOLDS = 5
 
@@ -765,56 +765,41 @@ def extract_data_from_videos():
         for video_path in video_files:
             video_name = os.path.basename(video_path)
             
-            # 6 Augmentations per video
-            for aug_idx in range(6): 
-                # Setup augmentation params
-                if aug_idx == 0:
-                    rot, shr, brt = 0, 0, 1.0
-                    suffix = ""
-                else:
-                    rot = np.random.uniform(-10, 10)
-                    shr = np.random.uniform(-0.1, 0.1)
-                    brt = np.random.uniform(0.8, 1.2)
-                    suffix = f"_aug{aug_idx}"
-                
-                reset_buffers()
-                cap = cv2.VideoCapture(video_path)
-                with mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5) as face_mesh:
-                    frame_count = 0
-                    while cap.isOpened():
-                        success, image = cap.read()
-                        if not success: break
-                        frame_count += 1
+            # No Augmentation - Single pass
+            reset_buffers()
+            cap = cv2.VideoCapture(video_path)
+            with mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5) as face_mesh:
+                frame_count = 0
+                while cap.isOpened():
+                    success, image = cap.read()
+                    if not success: break
+                    frame_count += 1
+                    
+                    image.flags.writeable = False
+                    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                    results = face_mesh.process(image_rgb)
+                    
+                    if results.multi_face_landmarks:
+                        landmarks = results.multi_face_landmarks[0].landmark
+                        lm_list = [[lm.x, lm.y, lm.z] for lm in landmarks]
                         
-                        # Apply Augmentation
-                        if aug_idx > 0:
-                            image = video_augmentation(image, brightness=brt, rotation=rot, shear=shr)
-
-                        image.flags.writeable = False
-                        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                        results = face_mesh.process(image_rgb)
+                        lm_list_norm = normalize_for_rotation_distance(lm_list, _prev_landmarks_global)
                         
-                        if results.multi_face_landmarks:
-                            landmarks = results.multi_face_landmarks[0].landmark
-                            lm_list = [[lm.x, lm.y, lm.z] for lm in landmarks]
-                            
-                            lm_list_norm = normalize_for_rotation_distance(lm_list, _prev_landmarks_global)
-                            
-                            features_dict = {}
-                            features_dict.update(compute_brow_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_cheek_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_eye_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_jaw_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_lips_features(lm_list_norm, _prev_landmarks_global))
-                            features_dict.update(compute_mouth_features(lm_list_norm, _prev_landmarks_global))
-                            
-                            features_dict['Video'] = video_name + suffix
-                            features_dict['Label'] = category
-                            features_dict['Frame'] = frame_count
-                            data.append(features_dict)
-                            
-                            _prev_landmarks_global = lm_list_norm
-                cap.release()
+                        features_dict = {}
+                        features_dict.update(compute_brow_features(lm_list_norm, _prev_landmarks_global))
+                        features_dict.update(compute_cheek_features(lm_list_norm, _prev_landmarks_global))
+                        features_dict.update(compute_eye_features(lm_list_norm, _prev_landmarks_global))
+                        features_dict.update(compute_jaw_features(lm_list_norm, _prev_landmarks_global))
+                        features_dict.update(compute_lips_features(lm_list_norm, _prev_landmarks_global))
+                        features_dict.update(compute_mouth_features(lm_list_norm, _prev_landmarks_global))
+                        
+                        features_dict['Video'] = video_name
+                        features_dict['Label'] = category
+                        features_dict['Frame'] = frame_count
+                        data.append(features_dict)
+                        
+                        _prev_landmarks_global = lm_list_norm
+            cap.release()
             
     df = pd.DataFrame(data)
     df = df.fillna(0)
@@ -989,7 +974,7 @@ def train_model(df=None, feature_names=None):
         sample_weights = torch.tensor([class_weights[y] for y in y_train], dtype=torch.float32)
         weighted_sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
-        train_dataset = ExpressionDataset(list(X_train), y_train, l_train, augment=True)
+        train_dataset = ExpressionDataset(list(X_train), y_train, l_train, augment=False)
         val_dataset = ExpressionDataset(list(X_val), y_val, l_val, augment=False)
         
         train_loader = DataLoader(train_dataset, batch_size=32, sampler=weighted_sampler, drop_last=True, collate_fn=collate_fn)
@@ -1114,7 +1099,7 @@ def train_model(df=None, feature_names=None):
         print("="*40)
         print(report)
         
-        report_path = os.path.join(OUTPUT_DIR, 'classification_report.txt')
+        report_path = os.path.join(OUTPUT_DIR, 'no_augment_classification_report.txt')
         with open(report_path, 'w') as f:
             f.write(f"Classification Report (Best Model - Fold {best_fold_idx+1})\n")
             f.write("="*60 + "\n")
@@ -1130,7 +1115,7 @@ def train_model(df=None, feature_names=None):
         plt.xlabel('Predicted Label')
         plt.tight_layout()
         
-        cm_path = os.path.join(OUTPUT_DIR, 'confusion_matrix.png')
+        cm_path = os.path.join(OUTPUT_DIR, 'no_augment_confusion_matrix.png')
         plt.savefig(cm_path)
         print(f"Confusion matrix saved to {cm_path}")
     else:
