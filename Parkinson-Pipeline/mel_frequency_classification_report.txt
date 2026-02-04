@@ -1,0 +1,13 @@
+Mel-Frequency Feature Classification Report
+===========================================
+
+Top Feature Analyzed: Eye_Left_Mag
+
+              precision    recall  f1-score   support
+
+     Healthy       0.59      0.61      0.60        36
+   Parkinson       0.60      0.58      0.59        36
+
+    accuracy                           0.60        72
+   macro avg       0.60      0.60      0.60        72
+weighted avg       0.60      0.60      0.60        72

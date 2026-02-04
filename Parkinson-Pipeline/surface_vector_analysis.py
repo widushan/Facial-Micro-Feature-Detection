@@ -457,8 +457,16 @@ def analyze_frequency_domain(df, top_feature):
         y_pred_all.extend(y_pred)
         y_true_all.extend(y_test)
         
+    report = classification_report(y_true_all, y_pred_all)
     print("\nClassification Report (Mel-Frequency Features):")
-    print(classification_report(y_true_all, y_pred_all))
+    print(report)
+    
+    with open("mel_frequency_classification_report.txt", "w") as f:
+        f.write("Mel-Frequency Feature Classification Report\n")
+        f.write("===========================================\n\n")
+        f.write(f"Top Feature Analyzed: {top_feature}\n\n")
+        f.write(report)
+    print("Classification report saved to 'mel_frequency_classification_report.txt'")
     
     # Plot Mel Spectrogram (heatmap of avg mel vectors per class)
     plt.figure(figsize=(10, 6))
