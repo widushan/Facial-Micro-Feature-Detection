@@ -12,6 +12,8 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+import scipy.fft
+from scipy.signal import get_window
 
 # Options
 DATASET_DIR = "../PD Videos/Training"
@@ -334,6 +336,140 @@ def analyze_features(df):
         f.write("Why: Identifies which surface vectors (Magnitude/Angle) most strongly differentiate PD vs Healthy.\n\n")
         f.write("Ranked Features:\n")
         f.write(feature_imp.to_string())
+        
+    return feature_imp.iloc[0]['Feature']
+
+# --- Frequency Domain Analysis (FFT -> Mel) ---
+def hz_to_mel(frequencies):
+    return 2595 * np.log10(1 + frequencies / 700.0)
+
+def mel_to_hz(mels):
+    return 700 * (10**(mels / 2595.0) - 1)
+
+def compute_mel_filterbank(num_filters, fft_size, sample_rate, low_freq, high_freq):
+    """
+    Compute a Mel-filterbank matrix.
+    """
+    low_mel = hz_to_mel(low_freq)
+    high_mel = hz_to_mel(high_freq)
+    
+    mel_points = np.linspace(low_mel, high_mel, num_filters + 2)
+    hz_points = mel_to_hz(mel_points)
+    
+    bin_points = np.floor((fft_size + 1) * hz_points / sample_rate).astype(int)
+    
+    filters = np.zeros((num_filters, int(fft_size / 2 + 1)))
+    
+    for m in range(1, num_filters + 1):
+        f_m_minus = bin_points[m - 1]
+        f_m = bin_points[m]
+        f_m_plus = bin_points[m + 1]
+
+        for k in range(f_m_minus, f_m):
+            filters[m - 1, k] = (k - f_m_minus) / (f_m - f_m_minus)
+        for k in range(f_m, f_m_plus):
+            filters[m - 1, k] = (f_m_plus - k) / (f_m_plus - f_m)
+            
+    return filters
+
+def analyze_frequency_domain(df, top_feature):
+    print(f"\nStarting Frequency Domain Analysis on Top Feature: {top_feature}")
+    print("Step 1: Extract Time Series -> Step 2: FFT -> Step 3: Mel Filterbank")
+    
+    # Parameters
+    SAMPLE_RATE = 30.0  # Approx FPS
+    FFT_SIZE = 256      # Next power of 2 from typical frame counts (approx 100-300 frames)
+    NUM_MEL_FILTERS = 12
+    
+    # Groups
+    processed_data = []
+    
+    videos = df['Video'].unique()
+    
+    mel_list = []
+    labels = []
+    
+    mel_filters = compute_mel_filterbank(NUM_MEL_FILTERS, FFT_SIZE, SAMPLE_RATE, 0, SAMPLE_RATE / 2)
+    
+    for video in videos:
+        video_df = df[df['Video'] == video].sort_values('Frame')
+        signal = video_df[top_feature].values
+        label = video_df['Label'].iloc[0]
+        
+        # Normalize signal (remove DC offset)
+        signal = signal - np.mean(signal)
+        
+        # Windowing (Hanning)
+        if len(signal) < FFT_SIZE:
+             # Pad with zeros
+            pad_len = FFT_SIZE - len(signal)
+            signal = np.pad(signal, (0, pad_len), 'constant')
+        else:
+             # Truncate
+             signal = signal[:FFT_SIZE]
+             
+        windowed_signal = signal * get_window("hann", len(signal))
+        
+        # FFT
+        spectrum = scipy.fft.fft(windowed_signal, n=FFT_SIZE)
+        magnitude_spectrum = np.abs(spectrum[:int(FFT_SIZE/2) + 1])
+        
+        # Power Spectrum
+        power_spectrum = (magnitude_spectrum ** 2) / FFT_SIZE
+        
+        # Mel Filterbank Application
+        mel_energies = np.dot(mel_filters, power_spectrum)
+        
+        # Log Mel Energies
+        # Add small epsilon to avoid log(0)
+        log_mel_energies = 10 * np.log10(mel_energies + 1e-9)
+        
+        features = {'Video': video, 'Label': label}
+        for i in range(NUM_MEL_FILTERS):
+            features[f'Mel_Band_{i+1}'] = log_mel_energies[i]
+            
+        mel_list.append(features)
+        
+    mel_df = pd.DataFrame(mel_list)
+    output_mel_csv = "mel_frequency_features.csv"
+    mel_df.to_csv(output_mel_csv, index=False)
+    print(f"Mel-frequency features saved to {output_mel_csv}")
+    
+    # Train Classifier on Mel Features
+    print("\nTraining Classifier on Mel-Frequency Features...")
+    X_mel = mel_df[[c for c in mel_df.columns if 'Mel_Band' in c]]
+    y_mel = mel_df['Label']
+    
+    rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    
+    # Cross Validation
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    y_pred_all = []
+    y_true_all = []
+    
+    for train_index, test_index in skf.split(X_mel, y_mel):
+        X_train, X_test = X_mel.iloc[train_index], X_mel.iloc[test_index]
+        y_train, y_test = y_mel.iloc[train_index], y_mel.iloc[test_index]
+        
+        rf.fit(X_train, y_train)
+        y_pred = rf.predict(X_test)
+        
+        y_pred_all.extend(y_pred)
+        y_true_all.extend(y_test)
+        
+    print("\nClassification Report (Mel-Frequency Features):")
+    print(classification_report(y_true_all, y_pred_all))
+    
+    # Plot Mel Spectrogram (heatmap of avg mel vectors per class)
+    plt.figure(figsize=(10, 6))
+    avg_mel = mel_df.groupby('Label')[[c for c in mel_df.columns if 'Mel_Band' in c]].mean()
+    sns.heatmap(avg_mel.T, cmap='viridis', annot=True)
+    plt.title(f'Average Random Mel-Vectorgram for Top Feature: {top_feature}')
+    plt.xlabel('Class')
+    plt.ylabel('Mel Frequency Band')
+    plt.tight_layout()
+    plt.savefig('mel_vectorgram_avg.png')
+    print("Average Mel-Vectorgram saved to 'mel_vectorgram_avg.png'")
 
 if __name__ == "__main__":
     if os.path.exists(OUTPUT_CSV):
@@ -342,5 +478,9 @@ if __name__ == "__main__":
     else:
         df = extract_features()
     
+    top_feature = None
     if df is not None:
-        analyze_features(df)
+        top_feature = analyze_features(df)
+        
+    if top_feature:
+        analyze_frequency_domain(df, top_feature)
