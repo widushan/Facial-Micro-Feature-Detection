@@ -1,0 +1,9 @@
+mediapipe==0.10.9
+opencv-python==4.8.1.78
+protobuf==3.20.3
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+seaborn

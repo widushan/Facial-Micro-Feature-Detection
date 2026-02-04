@@ -38,17 +38,73 @@ def reset_buffers():
     global _prev_landmarks_global
     _prev_landmarks_global = None
 
-def normalize_for_rotation_distance(landmarks, prev_landmarks):
+# --- Improved Normalization (Rotation + Translation + Scale) ---
+def normalize_with_rotation(landmarks, prev_landmarks):
     if landmarks is None or len(landmarks) == 0:
         return landmarks
     
+    # 1. Translation: Center on nose tip (idx 1)
     nose_tip = np.array(landmarks[1])
-    normalized = []
-    for lm in landmarks:
-        lm_arr = np.array(lm)
-        dist = np.linalg.norm(lm_arr - nose_tip) + 1e-6
-        normalized.append((lm_arr - nose_tip) / dist)
+    centered = [np.array(lm) - nose_tip for lm in landmarks]
+    
+    # 2. Rotation: Align eyes horizontally
+    # Left Eye Outer: 33, Right Eye Outer: 263
+    left_eye = centered[33]
+    right_eye = centered[263]
+    
+    # Angle of the vector connecting eyes
+    delta = right_eye - left_eye 
+    angle = np.arctan2(delta[1], delta[0])
+    
+    # Rotation Matrix (2D) to make angle 0 (horizontal)
+    # We want to rotate by -angle
+    c, s = np.cos(-angle), np.sin(-angle)
+    R = np.array(((c, -s), (s, c)))
+    
+    rotated = []
+    for lm in centered:
+        # Rotate x,y only
+        v2d = np.dot(R, lm[:2])
+        # Reconstruct (x, y, z) - z is unchanged for 2D rotation
+        rotated.append(np.array([v2d[0], v2d[1], lm[2]]))
+        
+    # 3. Scale: Distance between eyes (or nose distance)
+    # Using eye distance for scale is often more robust than nose distance
+    # because nose length varies less with expression but eye distance is bone-fixed?
+    # Actually, let's stick to the previous method's scale metric (distance from nose) 
+    # OR better: Inter-ocular distance (IOD) which is constant for a person.
+    
+    # New scale: Distance between outer eye corners
+    iod = np.linalg.norm(np.array(rotated[263]) - np.array(rotated[33])) + 1e-6
+    
+    normalized = [lm / iod for lm in rotated]
+    
     return normalized
+
+# --- Smoothing Class ---
+class LandmarkSmoother:
+    def __init__(self, alpha=0.6):
+        self.alpha = alpha
+        self.prev_smoothed = None
+        
+    def update(self, current_landmarks):
+        if current_landmarks is None:
+            return None
+        
+        current = np.array(current_landmarks)
+        
+        if self.prev_smoothed is None:
+            self.prev_smoothed = current
+            return current.tolist()
+        
+        # EMA Filter: S_t = alpha * Y_t + (1-alpha) * S_{t-1}
+        # alpha higher = follows input closer (less smooth, faster response)
+        # alpha lower = relies more on history (more smooth, assumes landmarks are stable)
+        # For micro-expressions, we want to kill jitter but keep movement. 0.6 is a good start.
+        smoothed = self.alpha * current + (1 - self.alpha) * self.prev_smoothed
+        self.prev_smoothed = smoothed
+        
+        return smoothed.tolist()
 
 def compute_surface_vectors_split(landmarks, prev_landmarks, left_idx, right_idx):
     if prev_landmarks is None or landmarks is None:
@@ -131,6 +187,9 @@ def extract_features():
             video_name = os.path.basename(video_path)
             reset_buffers()
             
+            # Initialize Smoother for this video
+            smoother = LandmarkSmoother(alpha=0.6)
+            
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
             
@@ -152,15 +211,19 @@ def extract_features():
                         landmarks = results.multi_face_landmarks[0].landmark
                         lm_list = [[lm.x, lm.y, lm.z] for lm in landmarks]
                         
-                        lm_list_norm = normalize_for_rotation_distance(lm_list, _prev_landmarks_global)
+                        # 1. Normalize (Rotation + Scale)
+                        lm_list_norm = normalize_with_rotation(lm_list, None)
+                        
+                        # 2. Smooth
+                        lm_list_smooth = smoother.update(lm_list_norm)
                         
                         # Extract Surface Vectors
-                        brow = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_brow_idx_surface, right_brow_idx_surface)
-                        cheek = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_cheek_idx_surface, right_cheek_idx_surface)
-                        eye = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_eye_idx_surface, right_eye_idx_surface)
-                        jaw = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_jaw_idx_surface, right_jaw_idx_surface)
-                        lips = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_lip_idx_surface, right_lip_idx_surface)
-                        mouth = compute_surface_vectors_split(lm_list_norm, _prev_landmarks_global, left_mouth_idx_surface, right_mouth_idx_surface)
+                        brow = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_brow_idx_surface, right_brow_idx_surface)
+                        cheek = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_cheek_idx_surface, right_cheek_idx_surface)
+                        eye = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_eye_idx_surface, right_eye_idx_surface)
+                        jaw = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_jaw_idx_surface, right_jaw_idx_surface)
+                        lips = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_lip_idx_surface, right_lip_idx_surface)
+                        mouth = compute_surface_vectors_split(lm_list_smooth, _prev_landmarks_global, left_mouth_idx_surface, right_mouth_idx_surface)
                         
                         features = {
                             'Video': video_name,
@@ -207,8 +270,12 @@ def extract_features():
                         
                         data.append(features)
                         
-                        _prev_landmarks_global = lm_list_norm
+                        _prev_landmarks_global = lm_list_smooth
             cap.release()
+
+    if not data:
+        print("No features extracted. Check if videos exist in the dataset directory.")
+        return pd.DataFrame()
 
     df = pd.DataFrame(data)
     df.to_csv(OUTPUT_CSV, index=False)
