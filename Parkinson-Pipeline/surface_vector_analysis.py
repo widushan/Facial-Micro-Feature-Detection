@@ -8,12 +8,15 @@ import mediapipe as mp
 import time
 from scipy.spatial import Delaunay
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.fft
 from scipy.signal import get_window
+from sklearn.metrics import roc_curve, auc, RocCurveDisplay
+
+# Options
 
 # Options
 DATASET_DIR = "../PD Videos/Training"
@@ -151,7 +154,11 @@ def compute_surface_vectors_split(landmarks, prev_landmarks, left_idx, right_idx
                 triangle_vectors.append(mean_v / norm)
             else:
                 triangle_vectors.append(mean_v)
-            area = 0.5 * np.abs(np.cross(points2d[i2] - points2d[i1], points2d[i3] - points2d[i1]))
+            # Manual 2D cross product for area (v1_x * v2_y - v1_y * v2_x)
+            v_a = points2d[i2] - points2d[i1]
+            v_b = points2d[i3] - points2d[i1]
+            cross_prod = v_a[0] * v_b[1] - v_a[1] * v_b[0]
+            area = 0.5 * np.abs(cross_prod)
             triangle_areas.append(area)
 
         triangle_norms = np.array(triangle_norms)
@@ -298,12 +305,25 @@ def analyze_features(df):
     clf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
     
     # 5-Fold Cross Validation for robust importance estimation
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    # StratifiedGroupKFold to prevent Data Leakage (Video-based split, not Frame-based)
+    # This ensures that frames from the same video are NOT in both train and test sets.
+    sgkf = StratifiedGroupKFold(n_splits=5)
     
     importances = np.zeros(len(feature_cols))
     
-    for train_idx, val_idx in skf.split(X, y):
+    # We need the 'Video' column for grouping, which corresponds to the subject
+    groups = df['Video']
+    
+    fold = 0
+    for train_idx, val_idx in sgkf.split(X, y, groups):
+        fold += 1
         X_train, y_train = X.iloc[train_idx], y.iloc[train_idx]
+        
+        # Check against data leakage
+        train_videos = df.iloc[train_idx]['Video'].unique()
+        val_videos = df.iloc[val_idx]['Video'].unique()
+        # assert len(set(train_videos).intersection(set(val_videos))) == 0
+        
         clf.fit(X_train, y_train)
         importances += clf.feature_importances_
         
@@ -313,6 +333,11 @@ def analyze_features(df):
     feature_imp = pd.DataFrame({'Feature': feature_cols, 'Importance': importances})
     feature_imp = feature_imp.sort_values(by='Importance', ascending=False).reset_index(drop=True)
     
+    # Save Feature Importance CSV (Ranked)
+    val_feature_imp_csv = "feature_importance.csv"
+    feature_imp.to_csv(val_feature_imp_csv) # Index is rank
+    print(f"Feature importance table saved to '{val_feature_imp_csv}'")
+
     print("\n========================================================")
     print("TOP SURFACE VECTOR FEATURES FOR PARKINSON'S DETECTION")
     print("========================================================")
@@ -325,8 +350,8 @@ def analyze_features(df):
     plt.xlabel('Importance Score')
     plt.ylabel('Feature')
     plt.tight_layout()
-    plt.savefig('surface_vector_importance.png')
-    print("\nFeature importance plot saved to 'surface_vector_importance.png'")
+    plt.savefig('feature_importance_rank.png')
+    print("\nFeature importance plot saved to 'feature_importance_rank.png'")
     
     # Detailed Report
     with open("surface_vector_analysis_report.txt", "w") as f:
@@ -372,7 +397,52 @@ def compute_mel_filterbank(num_filters, fft_size, sample_rate, low_freq, high_fr
             
     return filters
 
+def analyze_time_domain(df, top_feature):
+    print(f"\nStarting Time Domain Analysis on Top Feature: {top_feature}")
+    
+    # 1. Visualization: Raw Time-Domain Signal Plot (PD vs Healthy)
+    plt.figure(figsize=(12, 6))
+    
+    labels = df['Label'].unique()
+    colors = {'Parkinson': 'red', 'Healthy': 'green'} # Assumed labels
+    
+    # Plot top 3 videos from each class to avoid clutter
+    for label in labels:
+        videos = df[df['Label'] == label]['Video'].unique()[:3] 
+        for video in videos:
+            video_df = df[df['Video'] == video].sort_values('Frame')
+            signal = video_df[top_feature].values
+            plt.plot(signal, label=f"{label}", color=colors.get(label, 'blue'), alpha=0.5)
+            
+    # De-duplicate legend
+    handles, labels_txt = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels_txt, handles))
+    plt.legend(by_label.values(), by_label.keys())
+    
+    plt.title(f'Raw Time-Domain Signal ({top_feature}) - PD vs Healthy')
+    plt.xlabel('Frame')
+    plt.ylabel('Magnitude')
+    plt.tight_layout()
+    plt.savefig('time_domain_signal_pd_vs_healthy.png')
+    print("Time-domain signal plot saved to 'time_domain_signal_pd_vs_healthy.png'")
+    
+    # 2. Statistical Summary Table
+    stats_data = []
+    for label in labels:
+        class_df = df[df['Label'] == label]
+        mean_val = class_df[top_feature].mean()
+        std_val = class_df[top_feature].std()
+        stats_data.append({'Class': label, 'Mean': mean_val, 'Std': std_val})
+        
+    stats_df = pd.DataFrame(stats_data)
+    # Pivot to get Mean_PD, Std_PD format if there are exactly 2 classes, simplified here
+    stats_df.to_csv("time_domain_stats.csv", index=False)
+    print("Time-domain stats saved to 'time_domain_stats.csv'")
+
 def analyze_frequency_domain(df, top_feature):
+    # Before frequency analysis, do time domain analysis
+    analyze_time_domain(df, top_feature)
+
     print(f"\nStarting Frequency Domain Analysis on Top Feature: {top_feature}")
     print("Step 1: Extract Time Series -> Step 2: FFT -> Step 3: Mel Filterbank")
     
@@ -387,10 +457,15 @@ def analyze_frequency_domain(df, top_feature):
     videos = df['Video'].unique()
     
     mel_list = []
-    labels = []
     
     mel_filters = compute_mel_filterbank(NUM_MEL_FILTERS, FFT_SIZE, SAMPLE_RATE, 0, SAMPLE_RATE / 2)
     
+    # For FFT Spectrum Plotting
+    fft_spectra = {'Parkinson': [], 'Healthy': []}  # Store magnitudes
+    freq_axis = scipy.fft.rfftfreq(FFT_SIZE, 1/SAMPLE_RATE)
+    
+    dominant_freqs = []
+
     for video in videos:
         video_df = df[df['Video'] == video].sort_values('Frame')
         signal = video_df[top_feature].values
@@ -414,6 +489,15 @@ def analyze_frequency_domain(df, top_feature):
         spectrum = scipy.fft.fft(windowed_signal, n=FFT_SIZE)
         magnitude_spectrum = np.abs(spectrum[:int(FFT_SIZE/2) + 1])
         
+        # Store for Average FFT Plot
+        if label in fft_spectra:
+            fft_spectra[label].append(magnitude_spectrum)
+            
+        # Dominant Frequency
+        dom_idx = np.argmax(magnitude_spectrum)
+        dom_freq = freq_axis[dom_idx]
+        dominant_freqs.append({'Video': video, 'Label': label, 'Dominant_Freq': dom_freq})
+        
         # Power Spectrum
         power_spectrum = (magnitude_spectrum ** 2) / FFT_SIZE
         
@@ -435,17 +519,56 @@ def analyze_frequency_domain(df, top_feature):
     mel_df.to_csv(output_mel_csv, index=False)
     print(f"Mel-frequency features saved to {output_mel_csv}")
     
+    # --- Advanced Outputs: FFT Spectrum Comparison ---
+    plt.figure(figsize=(10, 6))
+    for label, spectra in fft_spectra.items():
+        if spectra:
+            avg_spec = np.mean(spectra, axis=0)
+            plt.plot(freq_axis, avg_spec, label=label)
+    plt.title(f'Average FFT Spectrum ({top_feature}) - PD vs Healthy')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig('fft_spectrum_pd_vs_healthy.png')
+    print("FFT spectrum plot saved to 'fft_spectrum_pd_vs_healthy.png'")
+    
+    # Save Dominant Frequencies
+    dom_freq_df = pd.DataFrame(dominant_freqs)
+    dom_freq_df.to_csv('dominant_frequencies.csv', index=False)
+    print("Dominant frequencies saved to 'dominant_frequencies.csv'")
+
+    # --- Advanced Outputs: Individual Class Mel Vectorgrams ---
+    for label in mel_df['Label'].unique():
+        class_mel = mel_df[mel_df['Label'] == label][[c for c in mel_df.columns if 'Mel_Band' in c]]
+        if not class_mel.empty:
+            plt.figure(figsize=(8, 5))
+            avg_mel = class_mel.mean()
+            # Heatmap needs matrix 2D, create 1 x N heatmap or replicate to look like band
+            # Better: Bar chart or Line plot for 1D vector, or Heatmap for all samples
+            # Let's do Heatmap of Average Vector (Transposed)
+            sns.heatmap(avg_mel.values.reshape(-1, 1).T, cmap='viridis', annot=True, yticklabels=[label], xticklabels=[f'Band {i+1}' for i in range(NUM_MEL_FILTERS)])
+            plt.title(f'Average Mel Vectorgram - {label}')
+            plt.tight_layout()
+            lower_label = label.lower()
+            plt.savefig(f'mel_vectorgram_{lower_label}.png')
+            print(f"Mel vectorgram for {label} saved.")
+
     # Train Classifier on Mel Features
     print("\nTraining Classifier on Mel-Frequency Features...")
     X_mel = mel_df[[c for c in mel_df.columns if 'Mel_Band' in c]]
     y_mel = mel_df['Label']
     
-    rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
     
     # Cross Validation
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     y_pred_all = []
     y_true_all = []
+    y_probas_all = [] # For ROC
+    
+    # For Mel Band Importance
+    feature_importances_mel = np.zeros(NUM_MEL_FILTERS)
     
     for train_index, test_index in skf.split(X_mel, y_mel):
         X_train, X_test = X_mel.iloc[train_index], X_mel.iloc[test_index]
@@ -454,8 +577,28 @@ def analyze_frequency_domain(df, top_feature):
         rf.fit(X_train, y_train)
         y_pred = rf.predict(X_test)
         
+        # Store probs for ROC (assuming binary class for ROC simplifiction or OneVsRest)
+        try:
+             y_proba = rf.predict_proba(X_test)[:, 1] # Prob of Positive Class (Parkinson?)
+        except:
+             y_proba = np.zeros(len(y_test))
+             
         y_pred_all.extend(y_pred)
         y_true_all.extend(y_test)
+        y_probas_all.extend(y_proba)
+        
+        feature_importances_mel += rf.feature_importances_
+        
+    feature_importances_mel /= 5
+    
+    # --- Advanced Outputs: Mel Band Importance ---
+    mel_imp_df = pd.DataFrame({'Band': [f'Band {i+1}' for i in range(NUM_MEL_FILTERS)], 'Importance': feature_importances_mel})
+    plt.figure(figsize=(10, 6))
+    sns.barplot(x='Band', y='Importance', data=mel_imp_df, palette='magma')
+    plt.title('Mel Band Feature Importance')
+    plt.tight_layout()
+    plt.savefig('mel_band_importance.png')
+    print("Mel band importance saved to 'mel_band_importance.png'")
         
     report = classification_report(y_true_all, y_pred_all)
     print("\nClassification Report (Mel-Frequency Features):")
@@ -468,7 +611,44 @@ def analyze_frequency_domain(df, top_feature):
         f.write(report)
     print("Classification report saved to 'mel_frequency_classification_report.txt'")
     
-    # Plot Mel Spectrogram (heatmap of avg mel vectors per class)
+    # --- Advanced Outputs: Confusion Matrix ---
+    cm = confusion_matrix(y_true_all, y_pred_all)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=sorted(mel_df['Label'].unique()), 
+                yticklabels=sorted(mel_df['Label'].unique()))
+    plt.title('Confusion Matrix (Mel Features)')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig('confusion_matrix.png')
+    print("Confusion matrix saved to 'confusion_matrix.png'")
+
+    # --- Advanced Outputs: ROC Curve ---
+    # Convert labels to binary (assuming 2 classes)
+    # Check classes
+    classes = sorted(mel_df['Label'].unique())
+    if len(classes) == 2:
+        # Map labels to 0/1
+        pos_label = classes[1] # e.g. Parkinson
+        y_true_bin = [1 if label == pos_label else 0 for label in y_true_all]
+        
+        fpr, tpr, thresholds = roc_curve(y_true_bin, y_probas_all)
+        roc_auc = auc(fpr, tpr)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'ROC Curve (Target: {pos_label})')
+        plt.legend(loc="lower right")
+        plt.savefig('roc_curve_pd_vs_healthy.png')
+        print(f"ROC curve saved to 'roc_curve_pd_vs_healthy.png'")
+    
+    # Plot Mel Spectrogram (heatmap of avg mel vectors per class) - KEEPING ORIG for comparison
     plt.figure(figsize=(10, 6))
     avg_mel = mel_df.groupby('Label')[[c for c in mel_df.columns if 'Mel_Band' in c]].mean()
     sns.heatmap(avg_mel.T, cmap='viridis', annot=True)
