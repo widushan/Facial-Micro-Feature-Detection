@@ -1,0 +1,8 @@
+              precision    recall  f1-score   support
+
+     Healthy     0.5263    0.5882    0.5556        34
+   Parkinson     0.5625    0.5000    0.5294        36
+
+    accuracy                         0.5429        70
+   macro avg     0.5444    0.5441    0.5425        70
+weighted avg     0.5449    0.5429    0.5421        70
