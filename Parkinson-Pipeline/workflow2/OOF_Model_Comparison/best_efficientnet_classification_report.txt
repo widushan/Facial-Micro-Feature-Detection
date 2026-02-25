@@ -1,0 +1,11 @@
+Model: efficientnet
+Best OOF AUC: 0.7386
+
+              precision    recall  f1-score   support
+
+     Healthy       0.66      0.56      0.60        34
+   Parkinson       0.63      0.72      0.68        36
+
+    accuracy                           0.64        70
+   macro avg       0.64      0.64      0.64        70
+weighted avg       0.64      0.64      0.64        70

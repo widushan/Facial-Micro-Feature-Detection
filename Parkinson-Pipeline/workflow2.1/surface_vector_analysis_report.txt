@@ -1,0 +1,32 @@
+Surface Vector Feature Analysis Report
+======================================
+
+Method: Random Forest Feature Importance
+Why: Identifies which surface vectors (Magnitude/Angle) most strongly differentiate PD vs Healthy.
+
+Ranked Features:
+              Feature  Importance
+0        Eye_Left_Mag    0.050861
+1        Jaw_Left_Mag    0.048852
+2       Eye_Right_Mag    0.048480
+3       Jaw_Right_Mag    0.048156
+4     Cheek_Right_Mag    0.046572
+5      Cheek_Left_Mag    0.046503
+6      Brow_Right_Mag    0.043912
+7       Brow_Left_Mag    0.043421
+8     Jaw_Right_Angle    0.041072
+9       Lips_Left_Mag    0.040223
+10    Brow_Left_Angle    0.040204
+11     Mouth_Left_Mag    0.040186
+12   Cheek_Left_Angle    0.040062
+13  Cheek_Right_Angle    0.040039
+14     Jaw_Left_Angle    0.039746
+15   Brow_Right_Angle    0.039667
+16    Mouth_Right_Mag    0.039624
+17     Lips_Right_Mag    0.039561
+18    Eye_Right_Angle    0.037930
+19   Mouth_Left_Angle    0.037531
+20     Eye_Left_Angle    0.037350
+21    Lips_Left_Angle    0.037115
+22   Lips_Right_Angle    0.036519
+23  Mouth_Right_Angle    0.036415

@@ -1,0 +1,12 @@
+Best Architecture: efficientnet_b0
+Combined Accuracy: 0.6042
+AUC: 0.6526
+
+              precision    recall  f1-score   support
+
+     Healthy       0.60      0.63      0.62       816
+   Parkinson       0.61      0.57      0.59       816
+
+    accuracy                           0.60      1632
+   macro avg       0.60      0.60      0.60      1632
+weighted avg       0.60      0.60      0.60      1632
